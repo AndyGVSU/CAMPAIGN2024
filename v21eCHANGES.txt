@@ -1,0 +1,65 @@
+Changes from previous version (V2.1C for C64)
+
+MAJOR FEATURES:
++AI: EASY/NORMAL/HARD: EASY for first-time players, NORMAL for experienced players, HARD approximates developer's performance (but not quite)
++nix debates if not enough room
++cost schedule warning; SRs to calculate all costs beforehand for both HEALTH/FUNDS
+  +for CAMPAIGN (if CP gain < 10)
+  +for TV ADS (fund/health cost was 0)
+  +handled by TREASURER; if FUNDS < 10, not available
+  +displays STAFF: OK if >10 funds; a ! next to a VISIT/TV ADS action if the cost in FUNDS is equal to the previous action (i.e. few CP were gained, indicating a schedule mishap or low HEALTH/FUNDS)
+  +for TV ADS, if there aren't enough HEALTH/FUNDS to pay for the normal cost, all gains/costs will be halved until it can be (which can still be beyond the following initial cost checks); TV ADS' 40-FUND barrier is thus decreased to a lower 15; additional HEALTH barrier of 30 required; halve schedule warning
++SOUND
++INCUMBENT RATING: NO (no bonus)/SUPERB(+6 CER / +4 FUND)/GOOD(+3 CER / +2 FUND)/AVERAGE (+2 CER, +1 FUND)/MEDIOCRE(+1 CER/+0 FUND)/DISASTER(-2 CER/-2 FUND) - will roughly correspond to -historic net approval ratings of >+20/~10/~0/~-10/-20<
++map only updates at beginning of week AND polling gets last week's CP values using history
++generally, all parties are now confirmed to be reasonably balanced
+
+MINOR FEATURES/CHANGES:
++auto-boot APPLE ][e disk
++letter confirm key skips double-tap to confirm
++fix empty name bug
++EXPR renamed to NETW (NETWORK)
++Map undecided change (only colored if >10% margin w/o UND)
++initial HEALTH and FUNDS are part of generated candidates (2*[0-31] for HEALTH, [0-31] for FUNDS); initial FUNDS base reduced to 32
++make health display non-numerical
++FUND = 2 + CORP * 2 + NETW * 2
++TV = CHAR + NETW + (CORP TABLE) [5/6/8/8/6/3/0/-1]
++LMIN = STAM * 2 + INTL
++Balancer for primary stats (every candidate has 10 "points" to distribute) 
++UND of each state has (54 - EC) subtracted from it at start
++"extremes" for all candidates; have a small chance of having an issue value 1 off from the min/max; this can inlcude 0s and 7s, which are nearly useless
++improve percentage string formatting
++implement original intended DOCTOR (HEALTH not visible if FUNDS < 10)
++post-title game seed input: 16 characters to init RNG (APPLE ][e can't do it very well otherwise)
++change displayed last week cumulative bonus to running cumulative bonus 
++paying a setup fee not required if cumulative bonus; setup fee no longer drains funds if unable to pay
++POSTGAME campaign's extra region bonus also adds LMIN to base value
++POLLING now necessarily resets the schedule
++map blank following staff off no longer occurs
++1 CP gain from low-health VISIT costs 1 FUNDS
++state tiebreaker add tie 2 for STATE LEAN
++state control bonus for REST is multiplied by 2; HEALTH gain is capped to 127
++map blank penalty for STAFF OUT removed
++still implement travel cost
++winner calculations / popular vote to highest decimal place on ending screen (removed lowest CER tie)
++CORP 7 gets 30 extra starting funds, CORP 8 gets 70
++IND gets 10 state lean in lean/tilt states, 6 in all others; gets state lean of maximum of D/R + 1 in all megastates; gets +5 to any issue bonus
+
+
+Changes for C64 backport (from V2.1D):
+
++REVERT LEAN: keeps 2-player games realistic, as all 50 states may not be visited; replaces UND decay
++Hard AI's [assumed UND multiplier for priority calculations] removed
++BUG: random mode did not reset initial CP correctly
++BUG: random mode CP gains were doubled instead of issue bonuses; removed issue bonus doubling
++simultaneous CP math: now, UND CP is held constant for each party's CP calculations so that the UND shown in a CENSUS is always factored into how much CP you get; fixed new bugs caused by this
++WORKERS party for 3-player game; is ORANGE and gets two 1s, two 6s, and a 3-4 for issues; otherwise identical to IND; nerfed IND/WOR from V2.1D
++Reimplement debates, but add AI support
++debate offensive attacks buffed
++debate TV networks FOX/PBS no longer caps to 6/1
++ENVIR made a normal 1-6 issue
++SFX reimplemented
++4-player map color UND is now only <3% instead of 10%
++4-player STATE LEAN for P/S is significantly nerfed (-1 for >=5 in all states)
++RANDOM mode STATE LEAN doubled (again)
++FUND secondary stat buffed slightly
