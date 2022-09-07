@@ -1,0 +1,1028 @@
+;ccalc.asm
+;CAMP02 
+;game math
+
+;cp_+5_store() 
+;stores to current cp addr and +5
+_CP5STOR STA (CP_ADDR),Y
+	INY 
+	INY 
+	INY 
+	INY 
+	INY 
+	STA (CP_ADDR),Y
+	RTS 
+
+;detailed_results(FSTATE = state)
+;draws history results for a state
+;LOCAL: FVAR1
+_DETAIL 
+	JSR _MAXR
+	LDA #$01
+	STA V_SUMFH
+	LDA #>V_HIST
+	STA HS_ADDR+1
+	LDA FSTATE
+	STA FARG1
+	JSR _CPOFFS
+	JSR _GX_CLRS
+	;draw header
+	DEC HS_ADDR+1
+
+	LDA #P_LEFT
+	STA GX_CCOL
+	LDA #P_DETSTR
+	STA GX_CROW
+	LDA #C_LBLUE
+	STA GX_DCOL
+	LDA FSTATE
+	JSR _DRWPOST
+	INC GX_CCOL
+	INC GX_CCOL
+	+__LAB2XY T_HIST
+	JSR _GX_STR
+
+	LDA #00
+	STA V_WEEK
+	LDA #P_DETLR
+	STA GX_CROW
+@WEEKLOOP 
+	INC HS_ADDR+1
+	;draw row
+	LDA #P_LEFT
+	STA GX_CCOL
+	;draw row
+	LDA #01
+	STA S_DRWUND
+	JSR _POPSUMR
+	JSR _STATSUM
+
+	LDA V_WEEK
+
+
+	CMP #$0A
+	BEQ @FINALW
+	ORA #$30
+	BNE @NOTFIN
+@FINALW 
+	LDA #$46 ;F
+@NOTFIN 
+	STA GX_CIND
+	LDA #C_WHITE
+	STA GX_DCOL
+	JSR _GX_CHAR
+
+	LDY #00
+	STY FVAR1
+
+	INC GX_CCOL
+@PTLOOP 
+	INC GX_CCOL
+
+	LDY FVAR1
+	LDA V_PTCOL,Y
+	STA GX_DCOL
+	TYA 
+	ASL 
+	TAY 
+	JSR _PERCSTA
+	+__LAB2XY V_FPOINT
+	JSR _GX_STR
+	INC FVAR1
+	LDY FVAR1
+	CPY #05
+	BEQ @WEEKDONE
+	CPY S_PLAYER
+	BNE @PTLOOP
+	LDY #UND_PRTY
+	STY FVAR1
+	BNE @PTLOOP
+@WEEKDONE 
+	INC GX_CCOL
+	;recalc total without UND
+	LDA #00
+	STA S_DRWUND
+	JSR _POPSUMR
+	JSR _STATSUM
+	JSR _SFVAR
+	JSR _MARGIN
+	BEQ @TIE
+	DEC FVAR4
+	LDA FVAR4 ;get control party
+	STA FX1
+	JSR _LFVAR
+
+	LDX FX1
+	JSR _DRWPN1
+	LDA #$2B ;+
+	STA GX_CIND
+	JSR _GX_CHAR
+
+
+	INC GX_CCOL
+	+__LAB2XY V_FPOINT
+	JSR _GX_STR
+	JMP @SKIPTIE
+@TIE 
+	JSR _LFVAR
+	+__LAB2XY T_TIE
+	JSR _GX_STR
+@SKIPTIE 
+	JSR _GXINCRW
+	INC V_WEEK
+	LDA V_WEEK
+	CMP #$0B
+	BEQ @SKIPLOOP
+	JMP @WEEKLOOP
+@SKIPLOOP 
+	RTS 
+
+;mask() 
+;blanks map
+_FILMASK 
+	LDA #01
+	TAX 
+@LOOP 
+	STA V_COLMSK,X
+	INX 
+	CPX #STATE_C
+	BNE @LOOP
+	RTS 
+
+;sum_ec(FARG5 = state limit (usually STATE_C))
+;sums EC by party control
+_SUMEC 
+	LDA #00
+	TAX 
+@CLR 
+	STA V_SUMEC,X
+	INX 
+	CPX #$0A
+	BNE @CLR
+	TAX 
+
+	LDY #01
+	STY FSTATE
+@LOOP 
+	LDY FSTATE
+	LDA V_CTRL,Y
+	ASL 
+	TAX 
+	LDA V_SUMEC,X
+	LDY FSTATE
+	CLC 
+	ADC V_EC,Y
+	STA V_SUMEC,X
+	BCC @CARRY
+	INC V_SUMEC+1,X
+@CARRY 
+
+
+	INC FSTATE
+	LDA FSTATE
+	CMP FARG5
+	BNE @LOOP
+
+	RTS 
+
+;state_get_region(A=state index)
+;returns region to X
+_STATEGR 
+	LDX #00
+@LOOP 
+	INX
+	CMP D_REGLIM,X
+	BCS @LOOP
+	RTS 
+
+;national_campaign(FARG1=extra region,FARG2=base value)
+;for pregame / lastminute -- all states
+;directly adds base value CP + issue bonus at no cost
+;DOES add CP / 4 to opponents
+;LOCAL: FVAR3,FARG3
+_NATCAMP 
+	LDA FARG1
+	STA FARG3
+
+	LDA #STATE_C
+	STA FVAR3
+	LDA #01
+	STA FSTATE
+	STA FARG1
+@OFFSET 
+	JSR _CPOFFS
+@LOOP 
+	LDA FSTATE
+	STA FARG1
+
+	LDA #00
+	STA FRET1
+	JSR _CISSUEB
+	LDA FRET1
+	ASL 
+	CLC 
+	ADC FARG2
+	LSR ;(issue ; 2 + base) / 2 
+	STA FRET1
+
+	JSR _ADDCPU
+	JSR _CPOFFI
+	INC FSTATE
+	LDA FSTATE
+	CMP FVAR3
+	BNE @LOOP
+
+	LDX FARG3
+	BEQ @RTS
+	LDA D_REGLIM,X
+	STA FVAR3
+	LDA D_REGLIM-1,X
+
+
+	STA FSTATE
+	STA FARG1
+	LDA #00
+	STA FARG3
+	BEQ @OFFSET
+@RTS 
+	RTS 
+
+;pregame_campaign() 
+;national campaign for beginning of game
+_PRECAMP 
+	LDA C_CER
+	STA FARG2
+	LDA C_CREG
+	STA FARG1
+	JSR _NATCAMP
+	JSR _CANDSWAP
+	LDA V_PARTY
+	BNE _PRECAMP
+
+	JSR _MAPCOL
+	RTS 
+
+;postgame_campaign() 
+;national campaign for end of game
+_PSTCAMP 
+	LDA C_CER
+	CLC 
+	ADC C_LMIN ;base = CER + LMIN
+	STA FARG2
+	LDA C_CREG
+	STA FARG1
+	JSR _NATCAMP
+	JSR _CANDSWAP
+	LDA V_PARTY
+	BNE _PSTCAMP
+
+	JSR _MAPCOL
+	RTS 
+
+;add_cp_from_undecided(FRET1 = CP GAIN)
+;takes CP from UND and adds to current; if UND out, /4
+;CP_ADDR = current state
+_ADDCPU 
+	LDA S_PLAYER
+	CMP #$04
+	BNE @HALVE
+	LSR FRET1 ;1/2 CP in 4 player game
+@HALVE
+	LDY V_LSTATE
+	LDA #00
+	STA V_REVERT,Y
+	;add to total CP gains
+	LDA V_PARTY
+	ASL 
+	TAX 
+	LDA V_ALLCP,X
+	CLC 
+	ADC FRET1
+	STA V_ALLCP,X
+	BCC @CARRY
+	INC V_ALLCP+1,X
+
+
+@CARRY 
+	LDX #$0A
+	LDA V_ALLCP,X
+	CLC 
+	ADC FRET1
+	STA V_ALLCP,X
+	BCC @CARRY2
+	INC V_ALLCP+1,X
+@CARRY2 
+_ADDCPUN ;NO REVERT
+;LDY #UND_OFFS
+;LDA (CP_ADDR),Y
+	LDY V_LSTATE
+	LDA V_UNDCP,Y
+	CMP FRET1
+	BCC @LESSUND
+
+	LDY #UND_OFFS
+	LDA (CP_ADDR),Y
+	SEC 
+	SBC FRET1
+	STA (CP_ADDR),Y
+	BCS @OVERFLW
+	LDA #$00 ;can occur due to V_UNDCP use
+	STA (CP_ADDR),Y
+@OVERFLW 
+	LDY V_PARTY
+	INY 
+	LDA (CP_ADDR),Y
+	CLV 
+	CLC 
+	ADC FRET1
+	JSR _ADDCPU1
+	LDA FRET1
+	TAX 
+	JSR _ADDCPU2
+	RTS 
+@LESSUND 
+	TAX 
+	LDY V_PARTY
+	INY 
+	CLV 
+	CLC 
+	ADC (CP_ADDR),Y
+	JSR _ADDCPU2
+	
+	LDA S_CLASSC
+	BNE @NO4
+	
+	LDA FRET1
+	LDY #UND_OFFS
+	SEC 
+	SBC (CP_ADDR),Y
+	LSR 
+	LSR 
+	LDY V_PARTY
+	INY 
+	CLC 
+	ADC (CP_ADDR),Y
+	JSR _ADDCPU1
+	STA (CP_ADDR),Y
+@NO4
+	LDY #UND_OFFS
+	LDA #00
+	STA (CP_ADDR),Y
+	RTS 
+;check for overflow store (cap to #$FF)
+_ADDCPU1 
+	BCC @NOVERF
+	LDA #$FF
+@NOVERF 
+	STA (CP_ADDR),Y
+	RTS 
+;add cp /4 to other candidates
+_ADDCPU2 
+	INY 
+	CPY #$05
+	BNE @WRAP
+	LDY #$01
+@WRAP 
+	INC V_PARTY
+	CPY V_PARTY
+	BNE @RTS
+	DEC V_PARTY
+	RTS 
+@RTS 
+	DEC V_PARTY
+	TXA 
+	LSR 
+	LSR 
+	CLC 
+	ADC (CP_ADDR),Y
+	BCC @NOVERF
+	LDA #$FF
+@NOVERF 
+	STA (CP_ADDR),Y
+	JMP _ADDCPU2
+
+;calc_issue_bonus(FARG1=state index)
+;IS_ADDR set beforehand
+;adds issue bonus for current candidate to FRET1
+_CISSUEB 
+	LDY #$05
+@TOP 
+	DEY 
+	BPL @LOOP
+	;end of loop
+	LDA S_GMMODE
+	BEQ @INDBON ;skipped for random mode
+; ASL FRET1 ;issue bonus ; 2 in random mode
+	JMP @RTS
+@INDBON 
+	LDA S_PLAYER ;only for 3P game
+	CMP #$03
+	BNE @RTS
+	LDA V_PARTY ;only for 3rd player
+	CMP #$02
+	BNE @RTS
+	LDA FRET1
+
+	CLC 
+	ADC #$02
+	STA FRET1
+	;ISSUE BONUS + 2 FOR IND
+@RTS 
+	RTS 
+@LOOP 
+	LDA C_ISSUES,Y
+	CMP (IS_ADDR),Y
+	BNE @PLUS3
+	LDA #$03
+	JSR _CPADD
+	BNE @TOP
+@PLUS3 
+	TAX 
+	DEX 
+	TXA 
+	CMP (IS_ADDR),Y
+	BNE @OFFBY1L
+@ADD1 
+	LDA #$01
+	JSR _CPADD
+	BNE @TOP
+@OFFBY1L 
+	INX 
+	INX 
+	TXA 
+	CMP (IS_ADDR),Y
+	BNE @TOP
+	BEQ @ADD1
+
+;add_cp_to_cost(A=amt) 
+;adds CP to the returned CP value
+_CPADD 
+	CLC 
+	ADC FRET1
+	STA FRET1
+	RTS 
+
+;add_signed_to_unsigned(A=signed value,FSUS2=unsigned value)
+;returns to FSUS1
+;LOCAL: Y
+;caps to [#$00,#$FF]
+_ADDSUS 
+	TAY 
+	CLC 
+	ADC FSUS2
+	STA FSUS1
+
+	TYA 
+	BMI @NEG
+
+	LDA FSUS2
+	CMP FSUS1
+	BCC @RTS
+	BEQ @RTS
+	LDA #$FF
+
+	STA FSUS1
+	BNE @RTS
+@NEG 
+	LDA FSUS2
+	CMP FSUS1
+	BCS @RTS
+	LDA #00
+	STA FSUS1
+@RTS 
+	RTS 
+
+;negative(A=value) 
+_NEGATIV 
+	EOR #$FF
+	CLC 
+	ADC #$01
+	RTS 
+
+;draw_poll(X=REGION) 
+;LOCAL: FSTATE, FVAR3, FX1
+_DRWPOLL 
+	STX FX1
+	JSR _CLRBL
+	JSR _OFFSHIS
+
+	LDA #P_POLLR
+	STA GX_CROW
+	JSR _GXINCRW
+	LDA #P_POLLC
+	STA GX_CCOL
+
+	LDA #00
+	STA FVAR3
+@PNLOOP 
+	LDA #P_POLLC
+	STA GX_CCOL
+	LDX FVAR3
+	JSR _DRWPN1
+	LDA #$25
+	STA GX_CIND
+	JSR _GX_CHAR
+	INC FVAR3
+	JSR _GXINCRW
+;INC GX_CCOL ;space
+	LDA FVAR3
+
+	CMP S_PLAYER ;loop per player
+	BCC @PNLOOP
+	CMP #UND_OFFS
+	BEQ @PNDONE
+
+	LDA #UND_OFFS
+	STA FVAR3
+	DEC FVAR3
+	LDA S_DRWUND
+	BEQ @PNDONE ;if draw und off, ignore
+	JMP @PNLOOP ;if on, add UND
+
+
+@PNDONE 
+;JSR _GXINCRW
+	LDX FX1
+	LDA D_REGLIM,X
+	STA FVAR3
+	DEX 
+	LDA D_REGLIM,X
+	STA FSTATE
+	STA FARG1
+	JSR _CPOFFS
+
+	LDA #P_POLLC2
+	STA GX_LX1
+@LOOP 
+	LDA #P_POLLR
+	STA GX_CROW
+	LDA GX_LX1
+	STA GX_CCOL
+	LDA #C_WHITE
+	STA GX_DCOL
+	LDA FSTATE
+	JSR _DRWPOST
+	JSR _GXINCRW
+	LDA GX_LX1
+	STA GX_CCOL
+
+	JSR _POPSUMR
+	JSR _STATSUM
+
+	LDA #00
+	STA FVAR1 ;party count
+@PLAYLOOP 
+	LDA FVAR1
+	ASL 
+	TAY 
+
+	JSR _PERCSTA
+	LDX FVAR1
+	LDA V_PTCOL,X
+	STA GX_DCOL
+
+	LDA #00
+	STA V_FPOINT+2 ;remove % for C64
+	+__LAB2XY V_FPOINT
+	JSR _GX_STR
+	JSR _GXINCRW
+;INC GX_CCOL
+	LDA GX_LX1
+	STA GX_CCOL
+
+	INC FVAR1
+	LDA FVAR1
+	CMP S_PLAYER ;loop per player
+	BCC @PLAYLOOP
+	CMP #UND_OFFS
+	BEQ @PLDONE
+	LDA #UND_OFFS
+
+
+	STA FVAR1
+	DEC FVAR1
+	LDA S_DRWUND
+	BEQ @PLDONE ;if draw und off, ignore
+	JMP @PLAYLOOP ;if on, add UND
+@PLDONE 
+	JSR _GXINCRW
+
+	LDA GX_LX1
+	CLC 
+	ADC #$03
+	STA GX_LX1
+
+	JSR _CPOFFI
+	INC FSTATE
+	LDA FSTATE
+	CMP FVAR3
+	BNE @LOOP
+@DONE 
+	JSR _FTC
+	JSR _CLRBL
+	RTS 
+
+;save_history() 
+_SAVEHIS 
+	JSR _CPOFFR
+	LDA #$01
+	STA FSTATE
+
+	LDA #>V_HIST
+	CLC 
+	ADC V_WEEK
+	STA OFFSET+1
+	LDA #01
+	STA OFFSET
+
+	LDY #00
+@LOOP 
+	LDX #01
+@CLOOP 
+	STY FY1
+	TXA 
+	TAY 
+	LDA (CP_ADDR),Y
+	LDY FY1
+	STA (OFFSET),Y
+	INX 
+	INY 
+	CPX #UND_OF1M
+	BNE @CLOOP
+
+	INC FSTATE
+	JSR _CPOFFI
+	LDA FSTATE
+	CMP #STATE_C
+	BNE @LOOP
+	RTS 
+
+;tiebreaker() 
+;determines who wins control for a CP tie: 1: ISSUE BONUS -> 2: STATE LEAN -> 3: POPULAR VOTE
+;POPSUM, CP_ADDR, IS_ADDR set beforehand
+;returns A = party index, FRET2 = tie value
+;LOCAL: FVAR1-2,FRET1+3,FX1
+
+_TIE 
+	JSR _MAXPL
+	STX FVAR2 ;number of tied parties
+	JSR _MAXR
+
+	LDA #00
+	STA FVAR1 ;tied parties index
+@TIE1 
+	LDX FVAR1
+	LDA V_MAXPL,X
+	JSR _CANDLOAD
+	LDA #00
+	STA FRET1
+	JSR _CISSUEB
+	LDX FVAR1
+	TXA 
+	ASL 
+	TAX 
+	LDA FRET1
+	STA V_MAX,X
+
+	INC FVAR1
+	LDA FVAR1
+	CMP FVAR2
+	BNE @TIE1
+
+	LDA #$01
+	STA FRET3
+	JSR _MAX2
+	BEQ @GOTOT2
+	JMP _TIE2
+@GOTOT2 
+	LDA #00
+	STA FVAR1
+@TIE2 
+	LDX FVAR1
+	LDA V_MAXPL,X
+	CLC 
+	ADC #UND_OF1M
+	TAY 
+	LDA FVAR1
+	ASL 
+	TAX 
+	LDA (CP_ADDR),Y
+	STA V_MAX,X
+
+	INC FVAR1
+	LDA FVAR1
+	CMP FVAR2
+	BNE @TIE2
+
+	LDA #$02
+	STA FRET3
+	JSR _MAX2
+	BEQ @GOTOT3
+	JMP _TIE2
+@GOTOT3 
+
+	LDA #01
+	STA FX1 ;temp use for pop offset
+@TIE3L 
+	LDA #00
+	STA FVAR1
+@TIE3 
+	LDX FVAR1
+	LDA V_MAXPL,X
+	ASL 
+	CLC 
+	ADC FX1
+	TAX 
+	LDA V_POPSUM,X
+	STA FVAR6 ;temp value
+	LDA FVAR1
+	ASL 
+	TAX
+	LDA FVAR6
+	STA V_MAX,X
+
+	INC FVAR1
+	LDA FVAR1
+	CMP FVAR2
+	BNE @TIE3
+
+	JSR _MAX2
+	PHA 
+	BNE @TIE3DON
+	PLA 
+	DEC FX1
+	LDA FX1
+	BEQ @TIE3L ;if FX1 is not zero (#$FF)
+@TIE3DON 
+	LDA #$03
+	STA FRET3
+	PLA 
+	BEQ @GOTOT4
+	JMP _TIE2
+@GOTOT4 
+
+	LDA #$04
+	STA FRET3
+	LDA FVAR2
+	JSR _RNG
+	CLC 
+	ADC #$01
+	JMP _TIE2
+;return SR
+_TIE2 
+	TAX 
+	DEX 
+
+
+	LDA V_MAXPL,X
+	RTS 
+
+;calc_win() 
+;determines who won and by what tie level
+;FRET1 = winning party index + 1
+;RETURNS A = winning criteria
+_CALCWIN 
+	LDA #00
+	STA FRET1
+
+	LDA #STATE_C
+	STA FARG5
+	JSR _SUMEC
+
+	JSR _MAXR
+	LDX #00
+@LOOP1 
+	LDA V_SUMEC,X
+	STA V_MAX,X
+	INX 
+	CPX #$08
+	BNE @LOOP1
+	JSR _MAX2
+	BEQ @TIE1
+	STA FRET1
+	LDA #00
+	RTS 
+@TIE1 
+	JSR _MAXPL ;store EC tie
+	STX FAI ;temp store tied party count
+	JSR _MAXR
+
+; LDA #00
+; STA S_DRWUND
+; JSR _POPSUM1
+
+	LDX #00
+@LOOP2 
+	LDA V_ALLCP,X
+	STA V_MAX,X
+	INX 
+	CPX #$08
+	BNE @LOOP2
+	JSR _CALCWIN2
+	JSR _MAX2
+	BEQ @TIE2
+	STA FRET1
+	LDA #01
+	RTS 
+@TIE2 
+	JSR _MAXR
+
+	LDA #00
+	STA V_PARTY
+@LOOP3 
+	LDA V_PARTY
+
+
+	ASL 
+	TAX 
+	LDA C_LMIN
+	STA V_MAX,X
+
+	JSR _CANDSWAP
+	LDA V_PARTY
+	BNE @LOOP3
+
+	JSR _CALCWIN2
+	JSR _MAX2
+	BEQ @TIE3
+	STA FRET1
+	LDA #02
+	RTS 
+@TIE3 
+	LDX #00
+@PLLOOP 
+; LDA V_MAXPL,X
+; BEQ @PLDONE
+; INX
+; CPX FAI
+; BNE @PLLOOP
+@PLDONE 
+; TXA
+	LDA FAI
+	JSR _RNG
+	TAX 
+	LDA V_MAXPL,X
+
+	STA FRET1
+	INC FRET1
+	LDA #03
+	RTS 
+
+;filter only parties that tied in EC
+_CALCWIN2 
+	LDX #00
+	LDY #00
+@LOOP 
+	TXA 
+	CMP V_MAXPL,Y
+	BEQ @SKIP
+	PHA 
+	ASL 
+	TAX 
+	LDA #00
+	STA V_MAX,X
+	STA V_MAX+1,X
+	PLA 
+	TAX 
+	JMP @NOINY
+@SKIP 
+	INY 
+@NOINY 
+	INX 
+	CPX S_PLAYER
+
+
+	BNE @LOOP
+	RTS 
+
+;calculate_revert_lean() 
+;adds CP to unvisited states (scales cumulatively)
+_CALCREV 
+	LDX #01
+	STX FSTATE
+@LOOP 
+	LDX FSTATE
+	LDA V_REVERT,X
+	BEQ @SKIP
+	STA FVAR3
+
+	STX FARG1
+	JSR _CPOFFS
+@CUMUL 
+	LDY #00
+	STY FVAR2
+@LOOP2 
+	LDY FVAR2
+	STY V_PARTY
+	TYA 
+	CLC 
+	ADC #UND_OF1M
+	TAY 
+	LDA (CP_ADDR),Y
+	STA FRET1
+	JSR _ADDCPUN
+	INC FVAR2
+	LDA FVAR2
+	CMP S_PLAYER
+	BNE @LOOP2
+
+@SKIP 
+	INC FSTATE
+	LDA FSTATE
+	CMP #STATE_C
+	BNE @LOOP
+
+	LDX #01
+@LOOP3 
+	INC V_REVERT,X
+	INX 
+	CPX #STATE_C
+	BNE @LOOP3
+
+	LDA #00
+	STA V_PARTY
+	RTS 
+
+;save_undecided_cp() 
+;saves UND CP value; used for simultaneous calculations
+;i.e. UND CP is the same for all candidates during a week
+;instead of being executed in party order
+_SAVEUND 
+	LDA #$01
+
+
+	STA FARG1
+	STA FSTATE
+	JSR _CPOFFS
+@LOOP 
+	LDY #UND_OFFS
+	LDA (CP_ADDR),Y
+	LDX FSTATE
+	STA V_UNDCP,X
+
+	JSR _CPOFFI
+	INC FSTATE
+	LDA FSTATE
+	CMP #STATE_C
+	BNE @LOOP
+
+	RTS 
+
+;average_region_state_lean(V_PARTY = desired party)
+_REGLEAN
+
+	LDA #$01
+	STA FARG1
+	STA FSTATE
+	JSR _CPOFFS
+@STLOOP
+	LDA V_PARTY
+	CLC
+	ADC #UND_OF1M
+	TAY
+	LDA (CP_ADDR),Y
+	LDX FSTATE
+	STA V_CTRL,X ;temp use
+	
+	INC FSTATE
+	JSR _CPOFFI
+	LDA FSTATE
+	CMP #STATE_C
+	BNE @STLOOP
+
+	LDA #$01
+	STA FVAR1 ;region
+@REGLOOP
+	LDX FVAR1
+	LDA D_REGLIM-1,X
+	STA FVAR5 ;lower limit
+	LDA D_REGLIM,X
+	STA FVAR6 ;upper limit
+	
+	LDX FVAR5
+	LDY #00
+@INREGION	
+	LDA V_CTRL,X
+	STA V_AISTAT,Y
+	INY
+	INX
+	CPX FVAR6
+	BNE @INREGION
+	
+	+__LAB2O V_AIH2REG-1
+	LDX V_PARTY
+	LDY #$09
+	JSR _OFFSET
+	
+	LDX FVAR1
+	LDA D_REGC-1,X
+	STA FARG1
+	JSR _AVGVAL
+	LDY FVAR1
+	STA (OFFSET),Y
+	
+	INC FVAR1
+	LDA FVAR1
+	CMP #$0A
+	BNE @REGLOOP
+	RTS

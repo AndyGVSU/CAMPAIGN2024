@@ -1,0 +1,853 @@
+;cutil.asm
+;CAMP07 
+;utility routines
+
+;fire_to_confirm() 
+;returns 0 if fire key, nonzero val if not fire 
+_FTC 
+	LDA #P_TOP
+	STA GX_CROW
+	LDA #P_FTCC
+	STA GX_CCOL
+	+__LAB2XY T_FTC
+	JSR _GX_STR
+
+	JSR _INPUTF1
+	STA FRET1
+	LDA #P_FTCC
+	STA GX_LX1
+	LDA #P_FTCC2
+	STA GX_LX2
+	LDA #P_TOP
+	STA GX_LY1
+	LDA #$01
+	STA GX_LY2
+	JSR _GX_RECT ;fill in space
+
+	LDA FRET1
+	BEQ @RTS
+	CMP #$05
+	BNE @RTS
+	LDA #00 ;fast fire = confirm
+@RTS 
+	RTS 
+
+;right_select(X=top row,Y=bottom)
+;note: rows are separated by 2
+;returns (selected row) to FRET1
+_RSELECT 
+	TXA 
+	STA GX_CROW
+
+
+	STA FRET1
+_RSELSAV 
+	LDA #$01
+	STA SPRPOS8
+	LDA #$04
+	STA SPRPOS+0
+
+	TYA 
+	STA FVAR2
+	TXA 
+	STA FVAR1
+	LDA #P_RSEL2C
+	STA GX_CCOL
+	LDA #$00
+	STA GX_BCOL
+	LDA #$01
+	STA SPRON
+@INPUT 
+	JSR _RSEL4
+	JSR _INPUTF1
+	STA FVAR3
+	JSR _RSEL2 ;erase prev arrow
+	LDA FVAR3
+	BEQ @FIRE
+
+	CMP #VK_FASTF
+	BEQ @FASTFIR
+
+	CMP #VK_UP ;up
+	BNE @DOWN
+
+	JSR _SFXUP
+
+	LDA FRET1
+	SEC 
+	SBC #$01
+	STA FRET1
+	LDA FRET1
+	CMP FVAR1
+	BCC @UWRAP
+	BCS @INPUT
+@UWRAP 
+	LDA FVAR2
+	STA FRET1
+	BNE @INPUT
+@DOWN 
+	CMP #VK_DOWN
+	BNE @INPUT
+
+	JSR _SFXDOWN
+
+	LDA FRET1
+	CMP FVAR2
+	BNE @DWRAP
+	LDA FVAR1
+	STA FRET1
+	BNE @INPUT
+@DWRAP 
+	LDA FRET1
+	CLC 
+	ADC #$01
+	STA FRET1
+	LDA FRET1
+	BNE @INPUT
+@FIRE 
+	JSR _SFXFIRE
+
+	JSR _RSEL3
+	JSR _INPUTF1 ;;fire
+	BNE @INPUT
+@FASTFIR 
+	JSR _RSEL2
+
+	JSR _SFXFIRE
+
+	LDA #$00
+	STA SPRON
+
+	LDA FRET1
+	SEC 
+	SBC FVAR1
+	STA FRET1
+
+	RTS 
+
+;erase arrow
+_RSEL2 
+	RTS 
+	LDA #C_BLACK
+	STA GX_DCOL
+	LDA #$20
+	STA GX_CIND
+	JSR _GX_CHAR
+	RTS 
+;draw fire once arrow
+_RSEL3 
+	JSR _RSEL5
+	LDA #C_DGRAY
+_RSEL3_2 
+	STA SPRCOL+0
+	LDA GX_CROW
+	ASL 
+	ASL 
+	ASL 
+	CLC 
+	ADC #$32
+	STA SPRPOS+1
+	RTS 
+;draw standard arrow
+_RSEL4 
+	JSR _RSEL5
+	LDA #C_LGRAY
+	JSR _RSEL3_2
+	RTS 
+;update row
+_RSEL5 
+	LDA FRET1
+	STA GX_CROW
+	RTS 
+;wrapper for action menu save select
+_RSEL6 
+	JSR _RSEL5
+	JSR _RSELSAV
+	RTS 
+
+;percent2(smaller=farg1(L),f2(H); larger=f3,f4)
+;does not convert to string
+_PERCEN2 
+	LDA FARG2
+	LDY FARG1
+	JSR _162FAC
+	JSR _FAC2ARG
+	LDA FARG4
+	LDY FARG3
+	JSR _162FAC
+	JSR _FDIVT ;FAC = ARG / FAC
+	JSR _CLRSTR
+	RTS 
+
+;percent(smaller=farg1(L),f2(H); larger=f3,f4)
+;ARGUMENTS ARE NOT POINTERS
+;divides smaller (value!) by larger
+;#7FFF is max positive value?
+_PERCENT 
+	JSR _PERCEN2
+	JSR _FAC2STR ;float to str
+	RTS 
+
+;percent_format() 
+;transfers string to V_FPOINT, truncates to 2 digits
+_PERCFMT 
+	JSR _STRPERC
+	LDA #00 ;draw 2 digits only
+	STA V_FPOINT+3
+	LDA #$25 ;%
+	STA V_FPOINT+2
+
+	RTS 
+
+;arg_to_float3() 
+;transfers ARG to FLOAT3
+_ARG2F3 LDX #00
+@LOOP LDA ARG,X
+	STA V_FLOAT3,X
+	INX 
+	CPX #FLOATLEN
+	BNE @LOOP
+	RTS 
+;float3_to_arg() 
+_F32ARG LDX #00
+@LOOP LDA V_FLOAT3,X
+	STA ARG,X
+	INX 
+	CPX #FLOATLEN
+	BNE @LOOP
+	RTS 
+
+;percent_string() 
+;5-char percentage string from FAC zstr
+;string at $0100
+;outputs to V_FPOINT
+_STRPERC
+	LDX #00 ;zeroes
+@00LOOP 
+	LDA T_00PC,X
+	STA V_FPOINT,X
+	INX 
+	CPX #FLOATLEN ;zero-terminated
+	BNE @00LOOP
+
+	LDA V_STRING
+	STA GX_FORM1
+	LDA V_STRING+1
+	STA GX_FORM2
+	BNE @NOT1
+	;either zero or one
+	LDA GX_FORM1
+	CMP #$30
+	BNE @ONE
+	RTS 
+@ONE 
+	LDX #00
+@99LOOP 
+	LDA T_99PC,X
+	STA V_FPOINT,X
+	INX 
+	CPX #FLOATLEN
+	BNE @99LOOP
+	BEQ @RTS
+@NOT1 
+	LDA V_STRING+2
+	CMP #$2E
+	BEQ @SCI
+	LDX #01
+	LDY #00
+@SLOOP 
+	LDA V_STRING,X
+	BEQ @RTS
+	CMP #$2E
+	BEQ @SKIDEC
+	STA V_FPOINT,Y
+	INY 
+	CPY #$02
+	BNE @SKIDEC
+	INY 
+@SKIDEC 
+	INX ;skip input dec
+	CPY #$05
+	BNE @SLOOP
+	BEQ @RTS
+
+@SCI 
+	LDA V_STRING
+	CMP #VK_SPACE
+	BNE @SHIFT
+	LDX #00
+@SHIFTLP
+	LDA V_STRING+1,X
+	BEQ @SHIFT
+	STA V_STRING,X
+	INX
+	JMP @SHIFTLP
+@SHIFT
+	LDX #$FF
+@SCILOOP 
+	INX 
+	LDA V_STRING,X
+	CMP #$2D
+	BEQ @BREAKE
+	BNE @SCILOOP
+@BREAKE 
+	INX 
+	INX 
+	;INX 
+	LDA V_STRING,X
+	AND #$0F ;mask char
+	CMP #$05
+	BCS @RTS
+	LDX #00
+	TAY 
+	BNE @SLOOP
+
+@RTS RTS
+
+;float_append_percent() 
+;applies to V_FPOINT
+_FSTRAP LDA #$25
+	STA V_FPOINT+5
+	LDA #00
+	STA V_FPOINT+6
+	RTS 
+
+;float_truncate_2() 
+;cuts the string to two chars
+_FSTRT2 LDA #00
+	STA V_FPOINT+2
+	RTS 
+
+;clear_string() 
+_CLRSTR LDX #00
+	LDA #00
+@LOOP STA V_STRING,X
+	INX 
+	CPX #10
+
+
+	BNE @LOOP
+	RTS 
+
+;offset(x,y,OFFSET) 
+;adds ;Y times X to OFFSET
+_OFFSET CPX #00
+	BEQ @RTS
+@LOOP TYA
+	CLC 
+	ADC OFFSET
+	STA OFFSET
+	BCC @CARRY
+	INC OFFSET+1
+@CARRY DEX
+	BNE @LOOP
+@RTS RTS
+
+;cp_offset(farg1=state index)
+;sets CP_ADDR to state CP 9-block, IS_ADDR to issue 5-block
+;LOCAL: FX1,FY1
+_CPOFFS 
+	STX FX1
+	STY FY1
+	LDA FARG1
+	STA V_LSTATE ;save state
+	+__LAB2O V_CP
+	LDY #$09
+	LDX FARG1
+	DEX ;in state index starts at 1
+	JSR _OFFSET
+	LDA OFFSET
+	STA CP_ADDR
+	LDA OFFSET+1
+	STA CP_ADDR+1
+
+	+__LAB2O V_ISSUE
+	LDY #$05
+	LDX FARG1
+	DEX 
+	JSR _OFFSET
+	LDA OFFSET
+	STA IS_ADDR
+	STA HS_ADDR
+	LDA OFFSET+1
+	STA IS_ADDR+1
+
+	LDX FX1
+	LDY FY1
+	RTS 
+
+;cp_offset_inc() 
+;increments both CP_ADDR and IS_ADDR to next state
+_CPOFFI 
+	LDA CP_ADDR
+	CLC 
+	ADC #$09
+	STA CP_ADDR
+
+
+	BCC @CARRY
+	INC CP_ADDR+1
+@CARRY 
+	LDA IS_ADDR
+	CLC 
+	ADC #$05
+	STA IS_ADDR
+	BCC @CARRY2
+	INC IS_ADDR+1
+@CARRY2 
+	LDA HS_ADDR
+	CLC 
+	ADC #$05
+	STA HS_ADDR
+	BCC @CARRY3
+	INC HS_ADDR+1
+@CARRY3 
+	INC V_LSTATE
+	RTS 
+
+;cp_offset_reset() 
+_CPOFFR LDA #<V_CP
+	STA CP_ADDR
+	LDA #>V_CP
+	STA CP_ADDR+1
+	LDA #<V_ISSUE
+	STA IS_ADDR
+	LDA #>V_ISSUE
+	STA IS_ADDR+1
+	;does NOT reset HS_ADDR!
+	RTS 
+
+_RNG 
+	STA RNG1
+	LDA #$FF
+	STA RNG2
+	;JSR _RNGINIT
+@LOOP 
+	LDA RNG1
+	CMP RNG2
+	BCS @QUIT
+	LSR RNG2
+	JMP @LOOP
+@QUIT 
+	SEC 
+	ROL RNG2
+@REROLL 
+	LDA $D41B
+	AND RNG2
+	CMP RNG1
+	BCS @REROLL
+
+	;JSR _RNGOFF
+	CMP #$00
+	RTS 
+
+;int(x(L),a(U)) 
+;converts value to decimal INT, stores to string
+;copy of ROM routine, does not print
+
+
+_INT 
+	STA FSUS1
+	STX FSUS2
+	JSR _CLRSTR
+	JSR _CLRFAC
+	LDA FSUS1
+	STA FAC+1
+	LDX FSUS2
+	STX FAC+2
+	LDX #$90
+	SEC 
+	JSR $BC49
+	JSR $BDDF
+	RTS 
+
+;input() 
+;returns to A
+;keyboard only
+_INPUT 
+	JSR _GETINP
+	CMP #00
+	RTS 
+
+;input_filter_1() 
+;only filters joystick keys (IJKLM<sp>)
+;0=confirm,1=up,2=left,3=down,4=right,5=fastconfirm 
+_INPUTF1 
+	JSR _INPUT
+	CMP #$20
+	BEQ @SPACE
+	CMP #$49
+	BCC _INPUTF1
+	CMP #$4F
+	BCS _INPUTF1
+	SEC 
+	SBC #$48
+	JMP @RTS
+@SPACE 
+	LDA #00
+@RTS 
+	RTS 
+
+;input_filter_2() 
+;only filters ALPHA + NUMERAL keys
+;also handles space=20,bs=14,return=0D
+_INPUTF2 
+	JSR _INPUT
+	CMP #VK_SPACE
+	BEQ @RTS
+	CMP #VK_RET
+	BEQ @RTS
+	CMP #VK_BACK
+	BEQ @RTS
+	CMP #VK_SPACE
+	BCC _INPUTF2
+	CMP #$5B
+	BCS _INPUTF2
+@RTS 
+	CMP #00
+	RTS 
+
+;input_filter_3()
+;only filters NUMERAL keys
+_INPUTF3
+@INPUT
+	JSR _INPUTF2
+	CMP #$30
+	BCC @INPUT
+	CMP #$3A
+	BCS @INPUT
+	RTS
+	
+;player_name_input() 
+_PLAYINP 
+	JSR _CLRFP
+	LDA #00
+	STA FVAR1 ;cursor pos
+
+	+__COORD P_PLAYNR,P_PLAYNC
+	LDA #C_WHITE
+	STA GX_DCOL
+	STA FVAR2 ;party color
+	JSR _PLAYIN2
+
+@GETINP LDA FVAR2
+	STA GX_DCOL
+
+	JSR _INPUTF2
+	CMP #VK_SPACE
+	BEQ @SPACE
+	CMP #VK_RET
+	BEQ @PPROC
+	CMP #VK_BACK
+	BEQ @BACKSP
+	;valid key
+@DRAW 
+	STA GX_CIND
+	LDX FVAR1
+	STA V_FPOINT,X ;used for string temp
+	JSR _GX_CHAR
+	INC GX_CCOL
+	INC FVAR1
+
+	JSR _PLAYIN2
+
+	LDA FVAR1
+	CMP #$09
+	BNE @GETINP
+	BEQ @PPROC
+
+@SPACE LDA #$20
+	BNE @DRAW
+@BACKSP LDX FVAR1
+	BEQ @GETINP
+	DEC GX_CCOL
+	DEC FVAR1
+	DEX 
+	LDA #$20
+	STA V_FPOINT,X
+	JSR _PLAYIN2
+	JMP @GETINP
+@PPROC 
+	JSR _PLAYIN3
+	;do postproccessing
+	LDA V_FPOINT
+	BEQ @PLAYVER ;no empty name
+
+
+	CMP #$20 ;no leading space
+	BEQ @PLAYVER
+
+	+__LAB2O V_PNAME
+	LDX V_PARTY
+	LDY #NAMELEN
+	JSR _OFFSET
+
+	LDX #00
+	LDY #00
+@CLOOP LDA V_FPOINT,X
+	BNE @FILLSPAC
+	LDA #$20 ;fill empty space
+@FILLSPAC 
+	STA (OFFSET),Y
+	INX 
+	INY 
+	CPX #$09
+	BNE @CLOOP
+	LDA #00
+	LDY #$09
+	STA (OFFSET),Y
+@PLAYVER ;display final name
+	+__COORD P_PLAYNR,P_PLAYNC
+	LDA V_PARTY
+	JSR _DRWPLYR
+
+	JSR _FTC
+	BEQ @DONE
+	JMP _PLAYINP ;reinput if denied
+@DONE 
+	RTS 
+;draw cursor
+_PLAYIN2 
+	LDA #FILLCHR
+	STA GX_CIND
+	JSR _GX_CHAR ;draw cursor
+	INC GX_CCOL
+_PLAYIN3 LDA #C_BLACK
+	STA GX_DCOL
+	LDA #$20
+	STA GX_CIND ;clear in front of cursor
+	JSR _GX_CHAR
+	DEC GX_CCOL
+	RTS 
+
+;copy(farg1,farg2,farg3,farg4,farg5) 
+;copies [length farg5] $(2,1) to $(4,3)
+_COPY LDX #00
+	LDY #00
+@LOOP LDA (FARG1),Y
+	STA (FARG3),Y
+	INY 
+	CPY FARG5
+	BNE @LOOP
+	RTS 
+
+
+
+;store_local_variables() 
+;stores FVAR1-5 out of ZP
+_SFVAR 
+	LDX #04
+@LOOP 
+	LDA FVAR1,X
+	STA V_FVAR,X
+	DEX 
+	BPL @LOOP
+	RTS 
+;load_local_variables() 
+;loads FVAR1-5 into ZP
+_LFVAR 
+	LDX #04
+@LOOP 
+	LDA V_FVAR,X
+	STA FVAR1,X
+	DEX 
+	BPL @LOOP
+	RTS 
+
+;intws3() 
+;pads intstring with whitespace
+_INTWS3 
+	LDY #$FF
+@LOOP 
+	INY 
+	LDA V_STRING,Y
+	BEQ @TERM
+	CMP #$2E
+	BEQ @TERM
+	JMP @LOOP
+@TERM 
+	TYA 
+	TAX 
+	CPX #$03
+	BNE @DONE
+	JMP @ADDTERM
+@DONE 
+@LOOP2 
+	LDA #$20
+	STA V_STRING,X
+	INX 
+	CPX #$03
+	BNE @LOOP2
+@ADDTERM 
+	LDA #$00
+	STA V_STRING,X
+	RTS 
+
+;clear_floating_point() 
+_CLRFP 
+	LDA #00
+	TAX 
+@CLRLOOP 
+	STA V_FPOINT,X
+	INX 
+
+
+	CPX #$09
+	BNE @CLRLOOP
+	RTS 
+
+;clear_fac_arg() 
+_CLRFAC 
+	LDA #00
+	LDX #00
+@LOOP 
+	STA FAC,X
+	STA ARG,X
+	INX 
+	CPX #$05
+	BNE @LOOP
+	RTS 
+
+;charset() 
+_CHARSET 
+	JSR _CHARSET1
+	JSR _CHARSET2
+	RTS 
+;copies character set to RAM
+_CHARSET1 
+	LDA $DC0E
+	AND #$FE
+	STA $DC0E
+	LDA $01
+	AND #$FB
+	STA $01
+	LDA #$D1
+	STA $FC
+	LDA #$39
+	STA $FE
+	LDY #00
+	STY $FB
+	STY $FD
+@LOOP 
+	LDA ($FB),Y
+	STA ($FD),Y
+	DEY 
+	BNE @LOOP
+
+	DEC $FC
+	DEC $FE
+	LDA #$37
+	CMP $FE
+	BNE @LOOP
+
+	LDA $01
+	ORA #$04
+	STA $01
+	LDA $DC0E
+	ORA #$01
+	STA $DC0E
+	LDA $D018
+	AND #$F0
+	ORA #$0E
+
+
+	STA $D018
+	RTS 
+;different characters
+_CHARSET2 
+	LDX #$2F
+	LDY #$00
+	JSR _CHARSET3
+
+	LDX #$29
+	LDY #$08
+	JSR _CHARSET3
+
+	LDX #$3B
+	LDY #$10
+	JSR _CHARSET3
+	RTS 
+
+;add extra character
+;X = CHARACTER INDEX, Y = EXTRA CHARACTER MAPPING
+_CHARSET3 
+	STY FVAR1
+	+__LAB2O NEWCHAR
+	LDY #$08
+	JSR _OFFSET
+	LDX FVAR1
+	LDY #00
+@LOOP 
+	LDA D_EXCHAR,X
+	STA (OFFSET),Y
+	INY 
+	INX 
+	CPY #$08
+	BNE @LOOP
+
+	RTS 
+
+;move_cp_to_max(CP_ADDR preset)
+;moves CP data per player to V_MAX
+_CPTOMAX
+	LDY #01
+	LDX #00
+@MAXLOOP 
+	LDA (CP_ADDR),Y
+	STA V_MAX,X
+	INX 
+	INX 
+	INY 
+	CPY S_PLAY1M
+	BNE @MAXLOOP
+	RTS
+
+;moves game data out of new charset area
+; _COPYDAT 
+	; +__LAB2O DATA2024
+	; LDA OFFSET
+	; STA CP_ADDR
+	; LDA OFFSET+1
+	; STA CP_ADDR+1
+	; +__LAB2O _DATACOPY
+
+	; LDA #<DATASIZE
+	; STA HS_ADDR
+	; LDA #>DATASIZE
+	; STA HS_ADDR+1
+
+	; LDA #>_DATACOPY
+	; CLC 
+	; ADC HS_ADDR+1
+	; STA HS_ADDR+1
+
+	; LDA #<_DATACOPY
+	; CLC 
+
+
+	; ADC HS_ADDR
+	; STA HS_ADDR
+	; BCC @CARRYH
+	; INC HS_ADDR+1
+; @CARRYH 
+
+	; LDY #00
+; @LOOP 
+	; LDA (OFFSET),Y
+	; STA (CP_ADDR),Y
+
+	; INC OFFSET
+	; BNE @CARRY
+	; INC OFFSET+1
+; @CARRY 
+	; INC CP_ADDR
+	; BNE @CARRY2
+	; INC CP_ADDR+1
+; @CARRY2 
+	; LDA OFFSET
+	; CMP HS_ADDR
+	; BNE @LOOP
+	; LDA OFFSET+1
+	; CMP HS_ADDR+1
+	; BNE @LOOP
+	; RTS 

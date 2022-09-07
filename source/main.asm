@@ -1,0 +1,815 @@
+;cmain.asm;CAMPAIGN MANAGER 2024 V2.1E C64 EDITION
+;main source file
+
+;sets draw coordinates
+!macro __COORD .row,.col {
+	LDA #.row
+	STA GX_CROW
+	LDA #.col
+	STA GX_CCOL
+	} 
+
+;unpacks label to X(L),Y(U)
+!macro __LAB2XY .label {
+	LDX #<.label
+	LDY #>.label
+	} 
+
+;swaps values; arg1 with arg2
+!macro __SWAP .arg1,.arg2,.swap {
+	LDA .arg1
+	STA .swap
+	LDA .arg2
+	STA .arg1
+	LDA .swap
+	STA .arg2
+	}
+
+;swaps values using X; arg1,x with arg2,x
+!macro __SWAPX .arg1,.arg2,.swap {
+	LDA .arg1,x
+	STA .swap
+	LDA .arg2,x
+	STA .arg1,x
+	LDA .swap
+	STA .arg2,x
+	}		
+
+;unpacks label to FVAR1(L),FVAR2(H)
+!macro __LAB2FV .label {
+	LDA #<.label
+	STA FVAR1
+	LDA #>.label
+	STA FVAR2
+	} 
+;unpacks label to OFFSET(L),OFFSET(H)
+!macro __LAB2O .label {
+	LDA #<.label
+	STA OFFSET
+	LDA #>.label
+	STA OFFSET+1
+	} 
+;unpacks label to OFFSET2(L),OFFSET2(H)
+!macro __LAB2O2 .label {
+	LDA #<.label
+	STA OFFSET2
+	LDA #>.label
+	STA OFFSET2+1
+	}
+;moves OFFSET to OFFSET2
+!macro __O2O2 {
+	LDA OFFSET
+	STA OFFSET2
+	LDA OFFSET+1
+	STA OFFSET2+1
+	}
+;moves OFFSET2 to OFFSET
+!macro __O2O {
+	LDA OFFSET2
+	STA OFFSET
+	LDA OFFSET2+1
+	STA OFFSET+1
+	}
+;unpacks label1 to FARG1(L),FARG2(H)
+;unpacks label2 to FARG3,FARG4..
+!macro __LAB2A2 .label1,.label2 {
+	LDA #<.label1
+	STA FARG1
+	LDA #>.label1
+	STA FARG2
+	LDA #<.label2
+	STA FARG3
+	LDA #>.label2
+	STA FARG4
+	} 
+
+;unpacks label1 to FARG1(L),FARG2(H)
+!macro __LAB2A .label {
+	LDA #<.label
+	STA FARG1
+	LDA #>.label
+	STA FARG2
+	} 
+;transfers OFFSET/OFFSET+1 to X/Y
+!macro __O2XY {
+	LDX OFFSET
+	LDY OFFSET+1
+	} 
+
+;labels resolution][ graphics
+
+START = $0801
+
+;system routines
+_162FAC = $B391 ;?
+_FAC2ARG = $BC0F
+_FDIVT = $BB12
+_FAC2STR = $BDDD
+_162DEC = $BCCC
+_FAC232 = $BC9B
+_FSUBT = $B853
+
+;C64 addresses
+INT_ADDR = $0314
+KEYREP = $028A
+SPRPOS = $D000
+SPRPOS8 = $D010
+SCRREG1 = $D011
+SPRON = $D015
+SPRDBL = $D01D
+BACKCOL = $D021
+SPRCOL = $D027
+INTERRUPT = $EA31
+
+V_STRING = $0100
+
+V_SCREEN = $0400
+SPRPTR = $07F8
+V_SPRITE = $0840
+SFXFRQ = $D400
+SFXWIDTH = $D402
+SFXCTRL = $D404
+SFXATK = $D405
+SFXSUS = $D406
+SFXVOL = $D418
+
+_SCNKEY = $FF9F
+_GETIN = $FFE4
+
+BASE2 = $8700
+
+;camp2024 addresses
+V_CP = $0000+BASE2
+V_CTRL = $01C9+BASE2
+V_STCOL = $0200+BASE2
+V_TIE = $0234+BASE2
+V_TIERES = $0268+BASE2
+V_COLMSK = $029C+BASE2
+V_ISSUE = $0300+BASE2
+V_ALLCND = $0400+BASE2
+V_EC = $0485+BASE2
+V_FPOINT = $04C0+BASE2
+V_FLOAT3 = $04F8+BASE2
+V_PRIMRY = $0500+BASE2
+V_FHCOST = V_PRIMRY
+V_CPGAIN = $0510+BASE2
+V_PNAME = $0580+BASE2
+V_MAPVEC = $0600+BASE2 ;map shape vector table (96B)
+V_AIPOLC = $066F+BASE2 ;hard AI region poll count
+V_PRIOR = $0670+BASE2 ;hard AI priority list (29B)
+V_PRIOR2 = $0690+BASE2 ;hard AI priority list state INDEX (29B)
+V_AIPOLL = $06B0+BASE2 ;hard AI polled regions (1=POLL,2=CENSUS)
+V_AISTAT = $06C0+BASE2 ;hard AI group state list (<9B)
+V_MAX = $06D0+BASE2 ;8B
+
+V_REVERT = $0700+BASE2 ;per state
+V_LSTATE = $0734+BASE2
+V_UNDCP = $0735+BASE2 ;per state
+S_3PMODE = $076F+BASE2 ;0 = IND, 1 = WOR
+V_DACT = $0770+BASE2 ;debate action blocks (7B;4)
+V_DPCOUN = $078C+BASE2 ;debate penalty counts (4B)
+V_DDP = $0790+BASE2 ;debate DP totals (4B)
+V_DOPPON = $0794+BASE2 ;debate opponent list (3B)
+V_DPOBSC = $0797+BASE2 ;debate penalty obscured flags (4B)
+V_DDPQ = $079B+BASE2 ;debate question DP gain (4B)
+V_DOTHER = $07A0+BASE2 ;debate others issue values (4B)
+V_DPPREV = $07A4+BASE2 ;debate previous penalty flag (4B)
+V_DSTATE = $07A8+BASE2 ;debate selected states (3B)
+V_DPCURR = $07AB+BASE2 ;debate current penalty flags (4B)
+V_DPCLOG = $07AF+BASE2 ;debate penalty count log (12B)
+V_DNATL = $07CB+BASE2 ;debate total DP copy / nat'l bonus (4B)
+V_DTOPIC = $07CF+BASE2 ;debate selected topics (3B)
+V_DPHASE = $07D3+BASE2 ;debate phase (action/reaction)
+V_DISS0 = $07D4+BASE2 ;debate issue 0
+V_DISS1 = $07D5+BASE2 ;debate issue 1
+V_DQUEST = $07D6+BASE2 ;debate question index
+V_DISSUE = $07D7+BASE2 ;debate selected state issues + others (6B)
+V_DQSTAT = $07DD+BASE2 ;debate question state
+V_DCTV = $07DE+BASE2 ;debate current tv network
+V_DPRVTV = $07DF+BASE2 ;debate previous tv network
+V_DPCQAG = $07E0+BASE2 ;debate precalc question dp attacker (or passive) gain
+V_DPCQDG = $07E1+BASE2 ;debate precalc question dp defender gain
+V_ALLCP = $07E2+BASE2 ;12B
+V_AIH2REG = $0800+BASE2 ;36B (9 regions avg state lean * 4 parties)
+BASE3 = $9000
+
+V_INDSTA = $0004+BASE3 ;2B
+V_TRAVEL = $0006+BASE3 ;travel cost
+V_TVWARN = $0007+BASE3 ;TV ADS half warning
+V_COLOR = $0008+BASE3 ;draw with/without color
+V_REDRW1 = $0009+BASE3 ;no-redraw for candidate menu
+V_REDRW2 = $000A+BASE3 ;no-redraw for action menu
+V_AI = $000B+BASE3 ;ai level for each player
+V_FVAR = $000F+BASE3 ;5B FOR FVAR
+V_MAXPL = $0014+BASE3 ;1414-1417 - 4 parties
+V_GAMEOV = $0018+BASE3
+V_OUTOFM = $0019+BASE3 ;Out of Money on start of turn
+V_SUMFH = $001A+BASE3 ;Sum From History (if on)
+V_WARN = $001B+BASE3 ;current action warning
+V_PTCHR3 = $0020+BASE3 ;1420-143F - 3-CHAR PARTY
+V_RNG = $0040+BASE3 ;1440-144F (16B)
+V_SUMEC = $0056+BASE3 ;1456-145F (10B)
+V_POPSUM = $0060+BASE3 ;popular sum by party - (12B)
+V_TIEPV = $006C+BASE3 ;party vector
+V_TIEVV = $0071+BASE3 ;value vector
+SAVESEL = $0076+BASE3 ;save action menu select
+SAVEMAP = $0077+BASE3 ;save current map state
+MAP_ROW = $0078+BASE3
+MAP_COL = $0079+BASE3
+MAP_HELD = $007A+BASE3 ;held pixel
+MAP_RES = $007B+BASE3 ;state selected on map
+S_PLAY1L = $007C+BASE3 ;player - 1
+S_PLAY1M = $007D+BASE3 ;player + 1
+S_PLAYER = $007E+BASE3 ;count
+S_GMMODE = $007F+BASE3
+S_PCOLOR = $0080+BASE3
+S_QUICKG = $0081+BASE3
+S_EQCER = $0082+BASE3
+S_DEBTON = $0083+BASE3
+V_TVRS = $0084+BASE3 ;7 days
+S_MBLANK = $008B+BASE3
+S_DRWUND = $008C+BASE3
+V_PTCHAR = $008D+BASE3 ;6 PARTIES
+V_PTCOL = $0093+BASE3 ;6 COLORS
+C_SCHEDC = $009A+BASE3 ;count
+C_SCHED = $009B+BASE3 ;7 actions
+C_HEALTH = $00A2+BASE3
+C_MONEY = $00A3+BASE3
+C_VBONUS = $00A4+BASE3 ;Last Visit Action
+C_IREG = $00A5+BASE3 ;;start of week (initial)
+C_HOME = $00A6+BASE3
+C_TITLE = $00A7+BASE3
+C_CHAR = $00A8+BASE3
+C_STAM = $00A9+BASE3
+C_INTL = $00AA+BASE3
+C_NETW = $00AB+BASE3
+C_CORP = $00AC+BASE3
+C_PARTY = $00AD+BASE3
+C_CER = $00AE+BASE3
+C_STR = $00AF+BASE3
+C_FUND = $00B0+BASE3
+C_TV = $00B1+BASE3
+C_LMIN = $00B2+BASE3
+C_ISSUES = $00B3+BASE3
+C_CREG = $00B8+BASE3 ;;currently processed
+C_INCUMB = $00B9+BASE3
+V_WEEK = $00BA+BASE3
+V_PARTY = $00BB+BASE3
+V_CPGPTR = $00BC+BASE3 ;precalc cp gain pointer
+V_VBONUS = $00BD+BASE3
+V_SPRPTR = $00BE+BASE3
+GX_X = $00BF+BASE3
+GX_Y = $00C0+BASE3
+GX_XO = $00C1+BASE3
+GX_XP = $00C2+BASE3
+GX_XB = $00C3+BASE3
+GX_YO = $00C4+BASE3
+GX_UCOL = $00C5+BASE3
+GX_PCOL = $00C6+BASE3
+GX_RCOL = $00C7+BASE3
+GX_LX1 = $00C8+BASE3
+GX_LY1 = $00C9+BASE3
+GX_LX2 = $00CA+BASE3
+GX_LY2 = $00CB+BASE3
+S_CLASSC = $00CC+BASE3
+S_CUSTOM = $00CD+BASE3
+S_BLIND = $00CE+BASE3
+V_MUSTMR = $00CF+BASE3
+V_SCRREG1 = $00D0+BASE3
+V_MUSFLAG = $00D1+BASE3
+
+V_DBLOG = $0100+BASE3
+V_HIST = $0200+BASE3
+V_SCHIST = $0D00+BASE3
+BASE4 = $A000
+
+;ZEROPAGE 
+GARBAGE = $00
+
+MAXLOW = $10 ;max return value Lower
+MAXHIGH = $11 ;max return value Upper
+
+;SFX_DUR = $30
+;SFX_FRQ = $31
+;SFX_VAR = $32
+
+FPARTY = $3F
+
+;graphics zp
+GX_CROW = $42
+GX_CCOL = $43
+GX_CIND = $44
+GX_VARX = $45
+GX_VARY = $46
+GX_VARI = $47
+GX_VARI2 = $48
+GX_BCOL = $49 ;background color
+GX_DCOL = $4A ;draw color (char/str)
+;string counting
+GX_STRC = $4B
+GX_SCOL = $4C
+GX_SREP = $4D
+GX_SHLD = $4E
+
+GX_STLB = $40
+GX_STUB = $41
+
+;map counting
+MAP_ADR1 = $50
+MAP_ADR2 = $51
+MAP_STAT = $52
+GX_FORM1 = $53 ;string formatting
+GX_FORM2 = $54
+FVAR6 = $55
+
+RNG1 = $5E
+RNG2 = $5F
+
+FAC = $61
+ARG = $69
+
+FSUS1 = $D1 ;signed to unsigned (SUS!)
+FSUS2 = $D2
+
+FVAR1 = $D3
+FVAR2 = $D4
+FVAR3 = $D5
+FVAR4 = $D6
+FVAR5 = $D7
+FARG1 = $D8
+FARG2 = $D9
+FARG3 = $DA
+FARG4 = $DB
+FARG5 = $DC
+
+;function-local ZP
+FSTATE = $E0 ;US state iterator
+FAI = $E1 ;AI list index
+FAIMUL = $E2 ;AI multiplier
+FAICTRL = $E3 ;AI margin control value
+FAISUM = $E4 ;AI priority sum (2B)
+FAITV = $E5 ;AI TV ADS cap
+FAIPTR = $E6
+
+FRET1 = $EB
+FRET2 = $EC
+FRET3 = $ED
+FX1 = $EE ;for calls
+FY1 = $EF ;..
+
+OFFSET2 = $F0
+HS_ADDR = $F2 ;F6-F7 (history)
+IS_ADDR = $FA
+CP_ADDR = $FC ;FC-FD (campaign points)
+OFFSET = $FE ;FE-FF (general offset)
+
+;graphics constants
+C_BLACK = $00
+C_DRED = $02
+C_DBLUE = $06
+C_VIOLET = $04
+C_DGREEN = $05
+C_DGRAY = $0B
+C_BLUE = $0E
+C_LBLUE = $03
+C_BROWN = $09
+C_ORANGE = $08
+C_LGRAY = $0F
+C_PINK = $0A
+C_GREEN = $05
+C_YELLOW = $07
+C_LGREEN = $0D
+C_WHITE = $01
+
+PUNCS = $20
+FILLCHR = $2F
+NUMBERS = $30
+ALPHAS = $40
+PENCHAR = $60
+BACKCHAR = $70
+REPCHAR = $FE
+
+
+NEWLINE = $FF
+
+VK_FIRE = $00
+VK_UP = $01
+VK_LEFT = $02
+VK_DOWN = $03
+VK_RIGHT = $04
+VK_FASTF = $05
+
+VK_RET = $0D
+VK_BACK = $14
+VK_SPACE = $20
+
+;campaign 2024 constants
+UND_PRTY = $04
+UND_OFFS = $05
+UND_OF1M = $06
+STATE_C = $34
+PRIMC1L = $07
+PRIMARYC = $08
+NAMELEN = $0A
+CANDDATA = $20
+FLOATLEN = $06
+AISTATE = $1F
+
+DBPIVOT = $00
+DBANSWER = $01
+DBCHALL = $02
+DBALLY = $03
+DBDIFFER = $04
+DBMORAL = $05
+DBPERSNL = $06
+DBREST = $07
+DBSURVEY = $08
+
+DBACCR = $00
+DBPIVR = $01
+DBCNTR = $02
+
+DBPIS = $01
+DBPIF = $00
+DBPIF2 = $FF 
+DBANS = $02
+DBANF = $FE
+DBCHS = $04
+DBCHF = $FE
+DBCHF2 = $FC
+DBALDS = $04
+DBALDF = $FE
+DBALAS = $04
+DBALAF = $01
+DBRES = $FE
+DBACDS = $FE
+DBACDF = $FA
+DBACAS = $06
+DBPIDS = $00
+DBPIDF = $FD
+DBPIAS = $08
+DBCOAS = $08
+DBCOAF = $FC
+DBCODS = $04
+DBCODF = $FC
+
+
+;positional 
+P_TOP = $00
+P_LEFT = P_TOP
+P_RIGHT = $28
+P_BOTTOM = $19
+P_RSELC = $1F
+P_RSELC2 = $1E
+
+P_STAFFR = $17
+P_STAFR2 = $18
+P_STAFFC = $17
+P_MENBLR = $14
+P_MENBRC = P_LEFT
+P_POSTLR = $11
+P_POSTLC = $01
+P_MONEYR = $12
+P_MONEYC = $01
+P_VBONSR = $13
+P_VBONSC = $01
+P_ISSUER = P_MENBLR
+P_ISSUEC = $15
+P_PRIMR = P_MENBLR
+P_PRIMC = $05
+
+
+P_SECNDR = P_MENBLR
+P_SECNDC = $0C
+P_REGTPR = $03
+P_REGTPC = P_RSELC2
+P_REGLSR = $06
+P_REGLSC = P_RSELC
+P_REGLS2 = $04
+P_MENURR = P_TOP
+P_MENURC = P_RSELC2
+P_MENUR2 = $03
+P_MENUR3 = $04
+P_WEEKR = $01
+P_WEEKC = P_RSELC2
+P_TITL2R = $11
+P_TITL2C = $06
+P_INCUMR = $10
+P_INCUMC = P_RSELC
+P_AIMENR = $10
+P_AIMENC = P_RSELC2
+P_SCHEDR = $11
+P_SCHEDC = $1D
+P_ENDPOR = $11
+P_ENDPOC = $04
+P_ENDP2R = $12
+P_ENDP2C = $04
+P_ENDP22 = $05
+P_COLORR = $10
+P_COLOR2 = $11
+P_SCH2R = $10
+P_SCH2C = P_RSELC
+P_WARNC = $27
+P_DETSTR = $01
+P_DETLR = $03
+P_POLLR = $11
+P_POLLC = P_LEFT
+P_WINPTR = P_REGLSR
+P_WINPTC = P_RSELC
+P_PTTLC = $04
+P_HEALC = $08
+P_HEAL2C = $0F
+P_VBON2C = $0E
+P_WEEK2C = $25
+P_WINC = $05
+P_POLL2 = $01
+P_PNAMER = $11
+P_PNAMEC = P_RSELC2
+P_CONVNR = $12
+P_CONVNC = P_RSELC2
+P_NOYESR = $14
+P_NOYESC = P_RSELC
+P_VISITR = $04
+P_VISITC = P_RSELC2
+P_TITLEC = P_RSELC2
+P_ENDMNR = $11
+P_ENDMNC = P_RSELC
+P_MAPINFC = $05
+P_FTCC = $05
+P_BL2 = $1D
+
+P_PLAYNR = $11
+P_PLAYNC = $08
+P_RSEL2C = $0C
+P_FTCC2 = $16
+P_TITL2R2 = $14
+P_TITL2R3 = $18
+P_POLLC2 = $02
+P_MENUR4 = $0C
+
+P_DINTRR = $03
+P_DINTRC = $04
+P_DINTVR = $0A
+P_DINTVC = $04
+P_DINCTR = $06
+P_DINCTC = $04
+P_DBQR = $03
+P_DBQC = $05
+P_DBQNC = $0E
+P_DBQTC = $10
+P_DBQPR = $05
+P_DBQPC = P_DBQC
+P_DTOPR = $08
+P_DTOPC = P_DBQC
+P_MAPR = $01
+P_MAPC = $04
+P_MAP2R = $10
+P_MAP2C = $1D
+P_DAMR = P_TOP
+P_DAMR2 = $07
+P_DAMR3 = $0F
+P_DAMC = $1E
+P_DSMR = $11
+P_DSMC = P_RSELC
+P_DIMR1 = P_DSMR
+P_DIMR2 = $12
+P_DIMR3 = $17
+P_DIMC = P_RSELC
+P_DOPPR1 = P_DSMR
+P_DOPPR2 = $12
+P_DOPPC = P_RSELC
+P_DCONFR = $13
+P_DCONFC = P_LEFT
+P_DSTATR = $05
+P_DSTATC = P_RSELC2
+P_DPLYRR = $01
+P_DPLYRC = P_RSELC2
+P_UPNEXR = $01
+P_UPNEXC = P_RSELC2
+P_REACTR = $0C
+P_REACTC = $05
+P_DATTR = $05
+P_DATTC = P_RSELC2
+P_DATTOR = $01
+P_DATTOC = P_RSELC2
+P_DATTAR = $06
+P_DATTAC = P_RSELC2
+P_DRMENR = $08
+P_DRMEN2 = $0A
+P_DQAR = $03
+P_DQAC = $05
+P_DQRR = $07
+P_DQRC = P_DQAC
+P_DRMENC = P_RSELC2
+P_DMRX1 = $1E
+P_DMRX2 = P_RIGHT
+P_DMRY1 = P_TOP
+P_DMRY2 = $10
+P_DLOGMR = P_DSMR
+P_DLOGMC = P_RSELC
+P_DLOGMR2 = P_DSMR+1
+P_DLOGMR3 = P_DSMR+2
+P_DQAPR = P_DQAR
+P_DQAPC = P_DQAC
+P_DQF0R = $04
+P_DQF0C = $05
+P_DQF2R = $04
+P_DQF2C = $15
+P_DQF4R = $04
+P_DQF4C = $05
+P_DQF4S = $04
+P_DQF4D = $12
+P_DQF5R = $04
+P_DQF5C = $05
+P_DQF5S = $05
+P_DQF5D = $17
+P_DQF6R = $05
+P_DQF6C = $05
+P_DQF7R = $08
+P_DQF7C = $05
+P_DQRPR = P_DQRR
+P_DQRPC = $05
+P_DAUDC = $05
+P_DFINR = $02
+P_DFINR2 = $07
+P_DFINR3 = $08
+P_DFINC = $05
+P_DFINC2 = $0F
+P_DLOGOR = $02
+P_DLOGOC = $05
+P_DLOGPR = P_DLOGOR
+P_DLOGPC = P_DLOGOC
+P_DLOGNR = $03
+P_DLOGNC = $10
+P_DLOGTR = $05
+P_DLOGTC = $07
+P_DLOGAC = $05
+P_DLOGAR = $0A
+P_DLOGA2 = $09
+P_DLOGA3 = $12
+P_DLOGA4 = $07
+P_DLOGA5 = $12
+
+*= START
+!hex 0C080A009E3234323000000000000000000000
+!binary "source/DATASPREMPTY.dat" 
+
+!source "source/CGAME.asm" 
+!source "source/CSCHED.asm" 
+!source "source/CDEBATE1.asm"
+!source "source/CDRAW.asm" 
+!source "source/CGFX.asm" 
+!source "source/CAI.asm" 
+!source "source/CMARGIN.asm" 
+!source "source/CUTIL.asm" 
+!source "source/CMAP.asm" 
+!source "source/CCAND.asm"
+
+_DATACOPY 
+
+NEWCHAR = $3800
+DATA2024 = $3A00 ;separation between character set
+
+*= DATA2024
+;!pseudopc DATA2024 {
+;short text files
+;t_blankx: its repeat count is variable (edited during gameplay)
+!source "source/CCALC.asm" 
+!source "source/CDEBATE2.asm" 
+!source "source/CSFX.asm"
+!source "source/CC64.asm"
+!source "source/CMUSIC.asm"
+ 
+T_BLANKX !hex 6070FE200B00
+T_FTC !hex 706F2A4649524520544F20434F4E4649524D2A00
+T_SCHED !hex 7053FF4DFF54FF57FF54FF46FF5300
+T_TITLE2 !hex 706F43414D504149474E204D414E4147455220643230323400
+T_99PC !hex 39392E393900
+T_00PC !hex 30302E303000
+T_BLANK3 !hex 6070FE200300
+T_MONEY !hex 6C243A2000
+T_HEALTH !hex 4845414C54483A6AFE2D0800
+T_CONVEN !hex 7FFE290AFF70434F4E56454E54494F4E00
+T_NOYES !hex 4E4FFF59455300
+T_BANNER !hex 7FFE290AFFFFFE290A00
+T_WEEK !hex 70206F5745454BFE200500
+T_REGS !hex 6B524547494F4E5300
+T_VISIT !hex 706F20774D4150FE2006FF7020714D454E55FE20057000
+T_REST !hex 6FFE5A0400
+T_TVADS !hex 6E54562041445300
+T_FUNDR !hex 6746554E445241495300
+T_BONUS !hex 6F564953495420424F4E55533A2020202000
+T_STAFF !hex 6F53544146463A00
+T_STAFFG !hex 6E474F4F4400
+T_STAFFO !hex 6B4F55542000
+T_TIE !hex 6F54494500
+T_HIST !hex 6F484953544F525900
+T_WINPOP !hex 504F50554C415220564F54453A00
+T_WINBY !hex 57494E532042593A00
+T_COLOR !hex 434F4C4F52204F4E3A00
+T_T2 !hex 716FFE3B2862FFFE3B28FF6FFE3B2800
+
+T_QUEST !hex 5155455354494F4E20202000
+T_BACK !hex 6F4241434B00
+T_STATP !hex 6B424C554E44455200
+T_STATOK !hex 6E46494E4500
+T_STATTR !hex 6D54524F55424C4500
+T_UPNEXT !hex 6F5550204E4558543A2000
+T_REPLY !hex 6F5052455041524520594F5552205245504C49455300
+T_ATTACK !hex 6F41545441434B455200
+T_DLOGM !hex 6F56494557204C4F4753FF2020594553FF20204E4F00
+T_UNFAV !hex 43414E44494441544520202B2520202D25204E41544C00
+
+;large text files
+T_TITLE !binary "source/TEXTTITLEMENU.dat"
+T_TITLEX !binary "source/TEXTTITLEMENU2.dat"
+T_MENUBL !binary "source/TEXTMENUBL.dat" 
+T_POSTAL !binary "source/TEXTPOSTAL.dat" 
+T_MENUR !binary "source/TEXTRIGHTMENU.dat" 
+T_REGION !binary "source/TEXTREGIONS.dat" 
+T_ENDMNU !binary "source/TEXTENDMENU.dat" 
+T_INCUMB !binary "source/TEXTINCUMBENT.dat" 
+T_AI !binary "source/TEXTAIMENU.dat" 
+T_WIN !binary "source/TEXTWINCRIT.dat" 
+D_CANDID !binary "source/TEXTCTITLES.dat" 
+T_DINTRO !binary "source/TEXTDEB1.dat" 
+T_DTOPIC !binary "source/TEXTDEB2.dat" 
+T_DQUEST !binary "source/TEXTDEB3.dat" 
+T_DAMENU !binary "source/TEXTDEB4.dat"  
+T_DRMENU !binary "source/TEXTDEB5.dat" 
+T_DRESLT !binary "source/TEXTDEB6.dat"
+T_ISSUES !binary "source/TEXTDEB7.dat" 
+T_DCONF !binary "source/TEXTDEB8.dat" 
+T_DAUDI !binary "source/TEXTDEB9.dat"
+T_DNCONF = T_DCONF+12
+T_DFINAL !binary "source/TEXTDEB10.dat"
+T_DLOG !binary "source/TEXTDEB11.dat"
+
+D_DRESLT !hex 001A3859718AA8CFDD00F9
+D_DACODE !hex 171F28343C45505A
+
+;continual use
+D_MAPSHP !binary "source/DATAMAPSHAPE.dat" 
+D_TVCORP !hex 05060808060300FF
+D_REGLIM !hex 01070A0F161F23272F34
+D_REGC !hex 060305070904040805
+FVALUE1 !hex 8000000000
+D_3PLEAN !hex 060A08 ;not close state / close state / [G PLAINS or MOUNTAIN]
+;D_34CP !hex 0600000A0108070801
+D_INCCER !hex 0006030201FE
+D_INCFND !hex 0004020100FE
+D_AI_NP !hex 0100FC
+D_AI_UCP !hex 010003
+D_AI_POL !hex FCFF01020301FEFDFC
+D_AI_NUN !hex FF03
+D_AI_TV !hex 01040506070809
+D_CENSUS !hex 050607050905060608
+D_DRWT2C !hex 09060F06
+D_MEGAST !hex 071E2631 ;NY/FL/TX/CA
+D_SETPLY !hex 02030304
+D_TV2REG !hex 030805040607010209
+D_MEDSTA !hex 08090A0C0D191B1D2F
+
+D_C64COL !hex 00020604050B060E09080F0A05070D01
+T_DEBNET !hex 63434E4E0061464F58006250425300
+T_DEBNUM !hex 673153540067324E4400
+D_DTOPIC !binary "source/DATATOPICISS.dat" 
+D_DBAUDI !hex 0F191F
+D_DRCODE !hex 020B12
+
+;one-time (copied)
+;R_FONT !binary "source/DATAFONT.dat" 
+D_PARTY !binary "source/TEXTPNAME.dat" 
+WOR3 = D_PARTY+65
+IND3 = D_PARTY+54
+PAT3 = D_PARTY+21 
+D_PTCOL2 !hex 060207050B0408
+D_3PMEGA !hex 06030903060902070A08010A
+T_PLAYER !hex 504C4159455220202000
+D_EXCHAR !binary "source/DATAEXTRACHAR.dat" 
+D_SPRITE !binary "source/DATASPRITE.dat" 
+D_INITCP !binary "source/DATAINITCP.dat"
+D_ISSUE !binary "source/DATAISSUES.dat"
+D_EC !binary "source/DATAECOLLEGE.dat"
+
+;music files must be compiled with respective addresses separately using GoatTracker (F9 to compile)
+MUSIC = $6000
+*= $0000 + MUSIC
+D_MUSD !binary "source/song_dem.dat"
+*= $0400 + MUSIC
+D_MUSR !binary "source/song_rep.dat"
+*= $0800 + MUSIC
+D_MUSP !binary "source/song_pat.dat"
+*= $0C00 + MUSIC
+D_MUSS !binary "source/song_soc.dat"
+*= $1200 + MUSIC
+D_MUSI !binary "source/song_ind.dat"
+
+BASE5 = $1600 + MUSIC
+*= BASE5
+V_AIH2MEM = $0000 + BASE5 ;128B (AI HARD 2 visit memory)
+
+_DATAEND 
+LDA _DATAEND - D_INITCP + 3
+;}
+DATASIZE = _DATAEND-DATA2024

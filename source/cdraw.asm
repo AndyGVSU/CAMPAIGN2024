@@ -1,0 +1,794 @@
+;cdraw.asm
+;CAMP03 
+;most draw routines
+
+;draw_popular_ec() 
+;LOCAL: FVAR2
+;_POPSUM called beforehand
+;draws total popular vote and EC counts on left
+_DRWPOP
+	JSR _SUMEC
+
+	LDA #P_TOP
+	STA GX_CROW
+
+	LDA #00
+	STA FVAR2
+@LOOP 
+	LDA #P_LEFT
+	STA GX_CCOL
+
+	LDX FVAR2
+	JSR _DRWPN3
+	JSR _GXINCRW
+
+	LDA #P_LEFT
+	STA GX_CCOL
+
+	LDY FVAR2
+	TYA 
+	ASL 
+	TAY 
+	LDA V_SUMEC,Y
+	TAX 
+	LDA V_SUMEC+1,Y
+	JSR _INT
+	JSR _INTWS3
+	+__LAB2XY V_STRING
+	JSR _GX_STR
+
+	JSR _GXINCRW
+
+	LDA #P_LEFT
+	STA GX_CCOL
+
+	LDA S_DRWUND
+	BNE @SKIPCHK
+	LDA FVAR2
+	CMP #UND_PRTY
+	BEQ @SKIPUND
+@SKIPCHK 
+	LDA FVAR2
+	ASL 
+	TAY 
+	LDA V_POPSUM,Y
+	STA FARG1
+	LDA V_POPSUM+1,Y
+	STA FARG2
+	LDA V_POPSUM+10
+	STA FARG3
+	LDA V_POPSUM+11
+
+
+	STA FARG4
+	JSR _PERCENT
+	JSR _PERCFMT
+	+__LAB2XY V_FPOINT
+	JSR _GX_STR
+	JSR _GXINCRW
+@SKIPUND 
+	INC FVAR2
+	LDA FVAR2
+	CMP S_PLAYER
+	BCC @LOOP
+	CMP #$05
+	BCS @RTS
+	LDA #UND_PRTY
+	STA FVAR2
+	BNE @LOOP
+@RTS 
+	LDA #P_LEFT
+	STA GX_CCOL
+	+__LAB2XY T_BLANK3
+	JSR _GX_STR ;fill in last row (for erasing)
+	RTS 
+
+;draw_staff() 
+;draws whether the staff is available or not
+_DRWSTAF 
+	+__COORD P_STAFFR,P_STAFFC
+	+__LAB2XY T_STAFF
+	JSR _GX_STR
+
+	+__COORD P_STAFR2,P_STAFFC
+	LDA V_OUTOFM
+	BEQ @OK
+	+__LAB2XY T_STAFFO
+	JSR _GX_STR
+	RTS 
+@OK 
+	+__LAB2XY T_STAFFG
+	JSR _GX_STR
+	RTS 
+
+;draw_party_name_3char(X=party index)
+;row,col loaded beforehand
+_DRWPN3 
+	LDA V_PTCOL,X
+	STA GX_DCOL
+	+__LAB2O V_PTCHR3
+	LDY #$04
+	JSR _OFFSET
+	+__O2XY
+	JSR _GX_STR
+	RTS 
+
+;draw_party_char(X=party index)
+_DRWPN1 
+	LDA V_PTCOL,X
+	STA GX_DCOL
+	LDA V_PTCHAR,X
+
+
+	STA GX_CIND
+	JSR _GX_CHAR
+	INC GX_CCOL
+	RTS 
+
+;draw_winning_party() 
+;region in C_CREG
+_DRWWIN 
+	LDA #P_WINPTR
+	STA GX_CROW
+
+	LDX C_CREG
+	LDA D_REGLIM,X
+	STA FVAR3
+	LDA D_REGLIM-1,X
+	STA FSTATE
+@LOOP 
+	LDA #P_WINPTC
+	STA GX_CCOL
+
+	LDX FSTATE
+	LDA V_CTRL,X
+	TAX 
+	JSR _DRWPN1
+	LDX FSTATE
+	LDA V_TIERES,X
+	BEQ @SKIPTIE
+	ORA #$30
+	STA GX_CIND
+	JSR _GX_CHAR
+	JMP @SKIPSPC
+@SKIPTIE 
+	LDA #$20
+	STA GX_CIND
+	JSR _GX_CHAR
+@SKIPSPC 
+	JSR _GXINCRW
+
+	INC FSTATE
+	LDA FSTATE
+	CMP FVAR3
+	BNE @LOOP
+	RTS 
+
+;clear_bottom_left() 
+;clears bottom left
+_CLRBL 
+	LDA #P_LEFT
+	STA GX_LX1
+	LDA #P_POSTLR
+	STA GX_LY1
+	LDA #P_BL2
+	STA GX_LX2
+	LDA #P_BOTTOM
+	STA GX_LY2
+	JSR _GXRECTC
+	RTS 
+
+;clear_bottom_left_status() 
+;clears candidate info
+_CLRBL2 
+	LDA #P_LEFT
+	STA GX_LX1
+	LDA #P_POSTLR
+	STA GX_LY1
+	LDA #P_BL2
+	STA GX_LX2
+	LDA #P_POSTLR
+	CLC 
+	ADC #$03
+	STA GX_LY2
+	JSR _GXRECTC
+	RTS 
+
+;draw_candidate() 
+;primary,secondary,issues,title,name,home state
+;health, funds, cumulative bonus
+_DRWCAND 
+	JSR _CLRBL2
+	LDA V_REDRW1
+	BNE @SKIPDRW
+	+__LAB2XY T_MENUBL
+	+__COORD P_MENBLR,P_LEFT
+	JSR _GX_STR
+	INC V_REDRW1 ;MUST BE RESET TO DRAW!
+@SKIPDRW 
+
+	JSR _DRWPRIM
+	JSR _DRWSECN
+	JSR _DRWISSU
+
+	LDA #00
+	STA GX_LX1
+	LDA #$1D
+	STA GX_LX2
+	LDA #P_POSTLR
+	STA GX_LY1
+	LDA #P_MONEYR
+	STA GX_LY2
+	JSR _GXRECTC
+
+	LDX V_PARTY
+	LDA V_PTCOL,X
+	STA GX_DCOL
+	+__COORD P_POSTLR,P_POSTLC
+	LDA C_HOME
+	JSR _DRWPOST
+
+	LDA #P_PTTLC
+	STA GX_CCOL
+	JSR _DRWPTTL
+	LDA V_PARTY
+	JSR _DRWPLYR
+
+
+
+	LDA V_OUTOFM
+	BEQ @SKIPJMP
+	JMP @SKIPHL
+@SKIPJMP 
+
+	JSR _DRWFUND
+
+	LDA #P_HEALC
+	STA GX_CCOL
+	LDY #00
+	LDA C_HEALTH
+	LSR 
+	LSR 
+	LSR 
+	LSR 
+	LSR ;/32
+	STA FVAR1
+	LDA C_HEALTH
+	BEQ @SKIPINC
+	INC FVAR1 ;only if non-zero
+@SKIPINC 
+	LDA FVAR1
+	CMP #$02
+	BCC @DANGER
+	CMP #$04
+	BCS @OKHEAL
+	LDA #C_YELLOW ;warning
+	BNE @COLOR
+@DANGER LDA #C_PINK
+	BNE @COLOR
+@OKHEAL LDA #C_LGREEN
+@COLOR STA GX_DCOL
+	STA FVAR2
+	+__LAB2XY T_HEALTH
+	JSR _GX_STR
+
+	LDA #P_HEAL2C
+	STA GX_CCOL
+	LDA FVAR1
+	BEQ @SKIPHL
+	LDA FVAR2
+	STA GX_DCOL
+@DLOOP 
+	LDA #$2A ;heart
+	STA GX_CIND
+	JSR _GX_CHAR
+	INC GX_CCOL
+	DEC FVAR1
+	LDA FVAR1
+	BNE @DLOOP
+@SKIPHL 
+	JSR _DRWVBON
+	RTS 
+
+;draw_visit_bonus() 
+_DRWVBON 
+	+__COORD P_VBONSR,P_VBONSC
+
+
+
+	LDA V_OUTOFM
+	BEQ @SKIPO
+	LDX #00
+@CLRLOOP 
+	LDA #$20
+	STA V_STRING,X
+	INX 
+	CPX #$10
+	BNE @CLRLOOP
+	LDA #$00
+	STA V_STRING,X
+	+__LAB2XY V_STRING
+	JSR _GX_STR
+	RTS 
+@SKIPO 
+
+	+__LAB2XY T_BONUS
+	JSR _GX_STR
+
+	LDA #P_VBON2C
+	STA GX_CCOL
+	LDA C_VBONUS
+	AND #$80
+	BNE @MINUS
+	LDA #$2B
+	STA GX_CIND
+	LDA #C_LGREEN
+	STA GX_DCOL
+	BNE @DRAW
+@MINUS 
+	LDA #$2D
+	STA GX_CIND
+	LDA #C_PINK
+	STA GX_DCOL
+@DRAW 
+	JSR _GX_CHAR
+	INC GX_CCOL
+	LDA C_VBONUS
+	AND #$7F
+	JSR _DRWPOST
+
+	RTS 
+
+;draw_player_name(A=PLAYER INDEX)
+;gx_ccol,gx_crow set beforehand
+_DRWPLYR 
+	TAX 
+	LDA V_PTCOL,X
+	STA GX_DCOL
+	+__LAB2O V_PNAME
+	LDY #NAMELEN
+	JSR _OFFSET
+	LDX OFFSET
+	LDY OFFSET+1
+	JSR _GX_STR
+	RTS 
+
+
+
+;draw_postal_code(A=STATE INDEX)
+;gx_ccol,gx_crow,gx_dcol set beforehand
+;LOCAL: FX1
+_DRWPOST ASL
+	TAX 
+	DEX 
+	DEX 
+	LDA T_POSTAL,X
+	STX FX1
+	STA GX_CIND
+	JSR _GX_CHAR
+	INC GX_CCOL
+	LDX FX1
+	INX 
+	LDA T_POSTAL,X
+	STA GX_CIND
+	JSR _GX_CHAR
+	RTS 
+
+;draw_player_title() 
+;gx_dcol, gx_ccol, gx_crow set beforehand
+_DRWPTTL 
+	+__LAB2XY D_CANDID
+	LDA C_INCUMB
+	BEQ @NOTINC
+	TXA 
+	CLC 
+	ADC #$28
+	BCC @NC
+	INY 
+@NC 
+	TAX 
+	JMP @DRAW
+@NOTINC 
+	TXA 
+	CLC 
+	ADC C_TITLE
+	BCC @NOCARRY
+	INY 
+@NOCARRY 
+	TAX 
+@DRAW 
+	JSR _GX_STR
+	RTS 
+
+;draw_issue_values() 
+;current candidate
+_DRWISSU LDA #C_LBLUE
+	STA GX_DCOL
+	+__COORD P_ISSUER,P_ISSUEC
+
+	LDX #00
+@LOOP LDA C_ISSUES,X
+	ORA #$30
+	STA GX_CIND
+	STX FVAR1
+
+
+	JSR _GX_CHAR
+	LDX FVAR1
+	INX 
+	JSR _GXINCRW
+	CPX #$05
+	BNE @LOOP
+	RTS 
+
+;draw_primary stats()
+;current candidate
+_DRWPRIM LDA #C_VIOLET
+	STA GX_DCOL
+	LDA #P_PRIMR
+	STA GX_CROW
+	LDX #00
+
+@LOOP LDA #P_PRIMC
+	STA GX_CCOL
+	LDA C_CHAR,X
+	ORA #$30
+	STA GX_CIND
+	STX FVAR1
+	JSR _GX_CHAR
+	LDX FVAR1
+	INX 
+	JSR _GXINCRW
+	CPX #$05
+	BNE @LOOP
+	RTS 
+
+;draw_secondary_stats() 
+;current candidate
+_DRWSECN LDA #C_VIOLET
+	STA GX_DCOL
+	LDA #P_SECNDR
+	STA GX_CROW
+
+	LDY #00
+@LOOP LDA #C_VIOLET
+	STA GX_DCOL
+	LDA #P_SECNDC
+	STA GX_CCOL
+	LDA C_CER,Y
+	TAX 
+	LDA #00
+	STY FVAR1
+	JSR _INT
+	JSR _INTWS3
+	+__LAB2XY V_STRING
+	JSR _GX_STR
+
+	JSR _GXINCRW
+	LDY FVAR1
+	INY 
+	CPY #$05
+	BNE @LOOP
+	RTS 
+
+
+
+;draw_region_states(A=region) 
+;draws upper right state list for given region
+;LOCAL: FVAR2,FVAR3
+_DRWREGS 
+	;draw region at top
+	STA FSTATE
+	DEC FSTATE
+	TAX 
+	+__COORD P_REGTPR,P_REGTPC
+	LDA #C_LGRAY
+	STA GX_DCOL
+
+	JSR _DRWREGN
+	;get region bounds
+	LDX FSTATE
+	LDA D_REGLIM,X
+	STA FVAR2
+	LDA D_REGLIM+1,X
+	STA FVAR3
+
+	LDA #P_REGLSR
+	STA GX_CROW
+@LOOP LDA #C_DGRAY
+	STA GX_DCOL
+	LDA #P_REGLSC
+	STA GX_CCOL
+
+	LDX FVAR2
+	LDA #00
+	JSR _INT
+	+__LAB2XY V_STRING
+	JSR _GX_STR ;state index
+	INC GX_CCOL
+
+	LDA #C_LBLUE
+	STA GX_DCOL
+	LDA FVAR2
+	JSR _DRWPOST ;postal code
+	INC GX_CCOL
+	INC GX_CCOL
+
+	LDX FVAR2
+	JSR _DRWSTEC ;ec
+
+	JSR _GXINCRW
+	INC FVAR2
+	LDA FVAR2
+	CMP FVAR3
+	BNE @LOOP
+	;end of game draw control party + tie
+	RTS 
+
+;draw_state_ec(X=state index)
+;draws state's electoral college votes
+;gx_dcol,gx_row,gx_col set before call
+_DRWSTEC 
+
+
+	LDA V_EC,X
+	TAX 
+	LDA #00
+	JSR _INT
+	+__LAB2XY V_STRING
+	JSR _GX_STR ;ec
+	RTS 
+;draw_region_menu() 
+;draws region selection menu
+_DRWREGM 
+	+__LAB2XY T_REGION
+	+__COORD P_REGLS2,P_REGLSC
+	JSR _GX_STR
+	RTS 
+
+;draw_region_name(x=region index starting at 1)
+;draws [region index]+" "+[region name]
+;d_col, row, col loaded beforehand
+_DRWREGN 
+	+__LAB2O T_REGION+2
+	DEX 
+	LDY #$0C
+	JSR _OFFSET
+
+	LDY #00
+@CLOOP LDA (OFFSET),Y
+	STA V_STRING,Y
+	INY 
+	CPY #$0C
+	BNE @CLOOP
+
+	LDA #$20 ;construct string
+	STA V_STRING+1
+	LDA #00
+	STA V_STRING+12
+	+__LAB2XY V_STRING
+	JSR _GX_STR
+	RTS 
+
+;clear_menu_right() 
+;clears the campaign selection menu
+_CLRMENR 
+	LDA #P_RSELC
+	STA GX_LX1
+	LDA #P_MENUR2
+	STA GX_LY1
+	LDA #P_RIGHT
+	STA GX_LX2
+	LDA #$0F
+	STA GX_LY2
+	JSR _GXRECTC
+	RTS 
+
+;draw_menu_right() 
+;draws the campaign selection menu
+_DRWMENR 
+	LDA V_REDRW2
+
+	BNE @NODRAW
+	LDA #01
+	STA V_REDRW2
+	RTS 
+@NODRAW 
+	JSR _CLRMENR
+
+	LDX V_PARTY
+	LDA V_PTCOL,X
+	STA GX_DCOL
+	LDA #C_WHITE
+	STA GX_BCOL
+	+__LAB2XY T_BANNER
+	+__COORD P_MENURR,P_MENURC
+	JSR _GX_STR
+	JSR _DRWWEEK
+
+	LDX C_CREG
+	+__COORD P_MENUR2,P_MENURC
+	JSR _DRWREGN
+
+	+__LAB2XY T_MENUR
+	+__COORD P_MENUR3,P_MENURC
+	JSR _GX_STR
+	RTS 
+
+;draw_week() 
+;draws the current week
+_DRWWEEK 
+	+__COORD P_WEEKR,P_WEEKC
+	+__LAB2XY T_WEEK
+	JSR _GX_STR
+
+	LDA #P_WEEK2C
+	STA GX_CCOL
+
+	LDX V_WEEK
+	LDA #00
+	JSR _INT
+	+__LAB2XY V_STRING
+	JSR _GX_STR
+	RTS 
+
+;draw_title_2() 
+;the american banner and title text
+_DRW_T2 
+	+__COORD P_TITL2R,P_TITL2C
+	+__LAB2XY T_TITLE2
+	JSR _GX_STR
+
+	+__COORD P_TITL2R2,P_LEFT
+	+__LAB2XY T_T2
+	JSR _GX_STR
+	RTS 
+
+;draw_clear_title2()
+_CLR_T2 
+	LDA #P_LEFT
+	STA GX_LX1
+	LDA #P_RIGHT
+	STA GX_LX2
+	LDA #P_TITL2R2
+	STA GX_LY1
+	LDA #P_TITL2R3
+	STA GX_LY2
+	JSR _GXRECTC
+	RTS 
+
+;incumbent_menu() 
+_DRWINCM 
+	JSR _CLRSCHD
+	+__COORD P_INCUMR,P_INCUMC
+	+__LAB2XY T_INCUMB
+	JSR _GX_STR
+
+	LDX #$12
+	LDY #$17
+	JSR _RSELECT
+	BEQ @RTS
+	ORA #$F0
+	STA C_INCUMB
+@RTS 
+	JSR _CLRSCHD
+	RTS 
+
+;draw_ai_menu 
+_DRWAIM 
+	JSR _CLRSCHD
+	+__COORD P_AIMENR,P_AIMENC
+	+__LAB2XY T_AI
+	JSR _GX_STR
+
+	LDX #$11
+	LDY #$14
+	JSR _RSELECT
+	LDX V_PARTY
+	STA V_AI,X
+
+	JSR _CLRSCHD
+	RTS 
+
+;draw_week_schedule() 
+_DRWWSCH JSR _CLRSCHD
+	LDX V_PARTY
+	LDA V_PTCOL,X
+	STA GX_DCOL
+	+__COORD P_SCHEDR,P_SCHEDC
+	+__LAB2XY T_SCHED
+	JSR _GX_STR
+
+	RTS 
+
+;draw_win_end() 
+
+
+;draws the popular vote list and the winner's conditions
+;LOCAL: FVAR1
+_DRWWINE 
+	LDA #00
+	STA S_DRWUND
+	JSR _POPSUM1
+
+	+__COORD P_ENDPOR,P_ENDPOC
+
+	LDA #C_WHITE
+	STA GX_DCOL
+	+__LAB2XY T_WINPOP
+	JSR _GX_STR
+
+	LDA #P_ENDP2R
+	STA GX_CROW
+	LDA #00
+	STA FVAR1
+@LOOP 
+	LDA #P_ENDP2C
+	STA GX_CCOL
+
+	LDX FVAR1
+	JSR _DRWPN3
+	INC GX_CCOL
+	LDA FVAR1
+	ASL 
+	TAY 
+	JSR _PERCSTA
+	JSR _STRPERC ;overwrite formatting
+	JSR _FSTRAP
+	+__LAB2XY V_FPOINT
+	JSR _GX_STR
+
+	JSR _GXINCRW
+	INC FVAR1
+	LDA FVAR1
+	CMP S_PLAYER
+	BNE @LOOP
+
+	JSR _GXINCRW
+
+	LDA #P_ENDP22
+	STA GX_CCOL
+
+	JSR _CALCWIN
+	STA FRET2
+	DEC FRET1
+	LDA FRET1 ;winning party
+	JSR _DRWPLYR
+
+	INC GX_CCOL
+
+	LDA #C_WHITE
+	STA GX_DCOL
+	+__LAB2XY T_WINBY
+	JSR _GX_STR
+
+
+
+	JSR _GXINCRW
+
+	LDA #P_WINC
+	STA GX_CCOL
+	LDA #C_YELLOW
+	STA GX_DCOL
+
+	+__LAB2O T_WIN
+	LDX FRET2 ;winning criteria
+	LDY #$10
+	JSR _OFFSET
+	+__O2XY
+	JSR _GX_STR
+
+	RTS 
+
+;draw_funds() 
+_DRWFUND 
+	+__COORD P_MONEYR,P_MONEYC
+	+__LAB2XY T_MONEY
+	JSR _GX_STR
+	LDA #00
+	LDX C_MONEY
+	JSR _INT
+	JSR _INTWS3
+	+__LAB2XY V_STRING
+	JSR _GX_STR
+	RTS 
