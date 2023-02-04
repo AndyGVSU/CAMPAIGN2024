@@ -1,0 +1,780 @@
+;EVENTS
+
+;event_check()
+;main SR for events
+_ECHECK
+	LDA S_EVENTS
+	BEQ @RTS
+	JSR _EVCHOOSE
+	JSR _EPROCESS
+	JSR _GX_CLRS
+	JSR _EDRAW
+@RTS
+	RTS
+
+;event_choose()
+;picks the events for this WEEK
+_EVCHOOSE
+	JSR _ERESET
+	LDA #EVENTMAX
+	JSR _RNG ;0-3
+	CLC
+	ADC #$01
+	STA FVAR1
+	
+	LDA V_WEEK
+	CMP V_EVBIG
+	BEQ @MAJOR
+	
+	LDA #32
+	JSR _RNG
+	BNE @ZERO
+	JMP @DONE ;1/32 chance for no events
+@MAJOR
+	LDA FVAR1
+	CMP #01
+	BNE @ZERO
+	INC FVAR1 ;at least 2 events (1 is major)
+@ZERO
+	LDA FVAR1 ;event count
+	STA V_EVENTC
+@RNG
+	LDA #$FF
+	JSR _RNG
+	STA FVAR3 ;chance variable
+	
+	LDX #00
+@CHNCELP
+	INX
+	CPX #16
+	BCS @RNG
+	
+	LDA V_WEEK
+	CMP V_EVBIG
+	BNE @MAJOR2
+	LDA FVAR1
+	CMP V_EVENTC
+	BNE @MAJOR2
+	
+	LDA #04
+	JSR _RNG
+	CLC
+	ADC #EV_ANARCHY
+	TAX
+@MAJOR2
+
+	LDA D_ECHANCE-1,X
+	STA FVAR2
+	LDA FVAR3
+	CMP FVAR2 ;chance table
+	BCS @CHNCELP
+	
+	LDY FVAR1
+	TXA
+	STA V_EVENTS-1,Y
+	DEC FVAR1
+	LDA FVAR1
+	BEQ @DONE
+	JMP @RNG
+@DONE
+	RTS
+
+;event_reset()
+;resets the event list
+_ERESET
+	LDA #$00
+	TAX
+	STA V_EVENTC
+@LOOP
+	STA V_EVENTS,X
+	INX
+	CPX #$08
+	BNE @LOOP
+	TAX
+	INX
+@TABLOOP
+	LDA V_ETABLE,X
+	CMP #EV_ANARCHY ;major events permanent
+	BCS @SKIP
+	LDA #$00
+	STA V_ETABLE,X
+@SKIP
+	INX
+	CPX #STATE_C
+	BNE @TABLOOP
+	RTS
+
+;event_process
+;processes all events
+_EPROCESS
+	LDX #$00
+	STX FAI ;event index
+@LOOP
+	LDX FAI
+	LDA V_EVENTS,X
+	CPX V_EVENTC
+	BEQ @DONE
+	ASL
+	TAX
+	LDA D_EADDR-2,X
+	STA @EDIT+1
+	LDA D_EADDR-1,X
+	STA @EDIT+2
+@EDIT
+	JSR $0000
+	INC FAI
+	JMP @LOOP
+@DONE
+	RTS
+	
+;event_draw()
+;draws event log
+_EDRAW
+	LDA S_SKIPGAME
+	BEQ @SKG
+	JMP @SKIPGAME
+@SKG
+	LDA #$00
+	STA V_REDRW1
+	JSR _DRWBORD2
+	LDA #C_WHITE
+	STA GX_DCOL
+	
+	+__COORD P_EVENTR,P_EVENTC
+	+__LAB2XY T_EVINIT
+	JSR _GX_STR
+	LDA V_WEEK
+	ORA #NUMBERS
+	DEC GX_CCOL
+	DEC GX_CCOL
+	STA GX_CIND
+	JSR _GX_CHAR
+	
+	INC GX_CROW
+	INC GX_CROW
+	INC GX_CROW
+	LDA #P_EVENTC
+	STA GX_CCOL
+	
+	LDA #$00
+	STA FAI
+@LOOP
+	+__LAB2O T_EVENTS
+	LDX FAI
+	LDA V_EVENTS,X
+	BNE @SKIP
+@MAX
+	JMP @RTS
+@SKIP
+	CPX V_EVENTC
+	BEQ @MAX
+	
+	STA FAISUM ;event index
+	CMP #09
+	BCC @REUSE
+	SEC
+	SBC #$03
+@REUSE
+	TAX
+	DEX
+	LDY #$11
+	JSR _OFFSET
+	
+	DEC FAISUM
+	LDA FAISUM
+	AND #$01
+	STA FVAR1
+	LDA FAISUM
+	LSR
+	TAX
+	LDA FVAR1
+	BNE @ODD
+	LDA D_EDRAW,X
+	LSR
+	LSR
+	LSR
+	LSR
+	JMP @DTYPE
+@ODD
+	LDA D_EDRAW,X
+	AND #$0F
+@DTYPE
+	CMP #$00
+	BNE @1
+	JSR _EDRAW2
+	JMP @INC
+@1
+	CMP #$01
+	BNE @2
+	;text-REG
+	JSR _EDRAW2
+	JSR _EDRAWR
+	JMP @INC
+@2
+	CMP #$02
+	BNE @3
+	;text-STA
+	JSR _EDRAW2
+	JSR _EDRAWS
+	JMP @INC
+@3
+	CMP #$03
+	BNE @4
+	;STA-text
+	JSR _EDRAWS
+	JSR _GX_SPACE
+	JSR _EDRAW2
+	JMP @INC
+@4
+	;REG-text
+	+__O2O2 ;_DRWREGN uses OFFSET
+	JSR _EDRAWR
+	JSR _GX_SPACE
+	+__O2O
+	JSR _EDRAW2
+@INC
+	INC FAI
+	INC GX_CROW
+	INC GX_CROW
+	LDA #P_EVENTC
+	STA GX_CCOL
+	
+	JMP @LOOP
+@RTS
+	CPX #$00
+	BNE @SOMETEXT
+	+__LAB2XY T_EVNONE
+	JSR _GX_STR
+@SOMETEXT
+	JSR _FTC
+@SKIPGAME
+	RTS
+_EDRAWS
+	LDA #C_YELLOW
+	STA GX_DCOL
+	
+	LDX FAI
+	LDA V_EVENTS+4,X
+	JSR _DRWPOST
+	
+	RTS
+_EDRAWR
+	LDA #C_YELLOW
+	STA GX_DCOL
+	
+	LDX FAI
+	LDA V_EVENTS+4,X
+	AND #$0F
+	TAX
+	JSR _DRWREGN4
+	RTS
+_EDRAW2
+	+__O2XY
+	JSR _GX_STR
+	RTS
+
+;event_state()
+;assigns an event to a given state, not repeating
+_ESTATE
+	LDA #STATE_C-1
+	JSR _RNG
+	STA FSTATE
+	INC FSTATE
+	
+	LDX #00
+@LOOP
+	LDA V_EVENTS+4,X
+	BEQ @DONE
+	CMP FSTATE
+	BEQ _ESTATE
+	INX
+	CPX V_EVENTC
+	BNE @LOOP
+@DONE
+	LDA FSTATE
+	TAY
+	LDA V_ETABLE,Y 
+	BNE _ESTATE ;generate new state if it already had a (regional) event
+	
+	LDX FAI
+	TYA
+	STA V_EVENTS+4,X
+	
+	LDA V_EVENTS,X
+	LDY FSTATE
+	STA V_ETABLE,Y
+	RTS
+
+;event_region()
+;assigns an event to a given region, not repeating, adding it to the event table
+_EREGION
+	JSR _EREGNT
+	
+	LDA V_EVENTS,X
+	STA FVAR4 ;event index
+	
+	LDA FVAR1
+	AND #$0F
+	TAX
+	LDA D_REGLIM-1,X
+	STA FVAR2 ;lower state index
+	LDA D_REGLIM,X
+	STA FVAR3 ;upper state index
+	
+	LDX FVAR2
+@REGLOOP
+	LDA FVAR4
+	STA V_ETABLE,X
+	INX
+	CPX FVAR3
+	BNE @REGLOOP
+	
+	RTS
+;above, but do not add event to event table
+;event_region_no_table()
+_EREGNT
+	LDA #REGION_C
+	JSR _RNG
+	ORA #$F0
+	STA FVAR1 ;region
+	INC FVAR1
+	
+	LDX #00
+@LOOP
+	LDA V_EVENTS+4,X
+	BEQ @DONE ;if zero, no more checking
+	CMP FVAR1 ;no repeats
+	BEQ _EREGNT
+	CMP V_EVBIGR ;cannot choose major event region (which is locked)
+	BEQ _EREGNT
+	INX
+	CPX V_EVENTC
+	BNE @LOOP
+@DONE
+	LDA FVAR1
+	LDX FAI
+	STA V_EVENTS+4,X
+	RTS
+
+;any event not listed is simply marked in either the event variable list (permanent) or the event table (temporary)
+;***COMMON EVENTS***
+;event_state_moves_right()
+_ESRIGHT
+	JSR _ESTATE
+	JSR _ECPOFFS
+_ESRIGHT2
+	LDY #$02+UND_OFFS ;REP + 1
+	JSR _ECPINC
+	
+	LDA S_PLAYER
+	CMP #$04
+	BNE @ISSUE
+	LDY #$03+UND_OFFS ;PAT + 1
+	JSR _ECPINC
+@ISSUE
+	LDY #$00
+@ISLOOP
+	JSR _EISSINC
+	INY
+	CPY #ISSUEC
+	BNE @ISLOOP
+	
+	RTS
+;event_state_moves_left()
+_ESLEFT
+	JSR _ESTATE
+	JSR _ECPOFFS
+_ESLEFT2
+	LDY #$01+UND_OFFS ;DEM + 1
+	JSR _ECPINC
+	
+	LDA S_PLAYER
+	CMP #$04
+	BNE @ISSUE
+	LDY #$04+UND_OFFS ;SOC + 1
+	JSR _ECPINC
+@ISSUE
+	LDY #$00
+@ISLOOP
+	JSR _EISSDEC
+	INY
+	CPY #ISSUEC
+	BNE @ISLOOP
+	RTS
+;event_state_deradicalizes()
+_ESCENTER
+	JSR _ESTATE
+	JSR _ECPOFFS
+_ESCENTER2
+	LDA S_PLAYER
+	CMP #$03
+	BNE @ISSUE
+	LDY #$03+UND_OFFS ;IND/WOR + 1
+	JSR _ECPINC
+@ISSUE
+	LDY #$00
+@ISLOOP
+	JSR _EISSCEN
+	INY
+	CPY #ISSUEC
+	BNE @ISLOOP
+	RTS
+
+;***RARE EVENTS***
+;event_region_right()
+_ERRIGHT
+	LDA #$00
+	STA FVAR3
+	JSR _ERSHIFT
+	RTS
+;event_region_left()
+_ERLEFT
+	LDA #$01
+	STA FVAR3
+	JSR _ERSHIFT
+	RTS
+;event_region_deradicalize()
+_ERCENTER
+	LDA #$02
+	STA FVAR3
+	JSR _ERSHIFT
+	RTS
+
+;event_region_shift(FVAR3 = left/right/center 0/1/2)
+;covers all three region-wide ideological shifts
+_ERSHIFT
+	JSR _EREGNT
+	JSR _EREGLIM
+	
+	LDA FSTATE
+@LOOP
+	STA FARG1
+	JSR _CPOFFS
+	LDA FVAR3 ;shift direction
+	BEQ @RIGHT
+	CMP #$01
+	BEQ @LEFT
+	CMP #$02
+	BEQ @CENTER
+@RIGHT
+	JSR _ESRIGHT2
+	JMP @NEXT
+@LEFT
+	JSR _ESLEFT2
+	JMP @NEXT
+@CENTER
+	JSR _ESCENTER2
+	JMP @NEXT
+@NEXT
+	INC FSTATE
+	LDA FSTATE
+	CMP FVAR2
+	BNE @LOOP
+	
+	RTS
+
+;event_immigrate()
+_EIMMIGRAT
+	JSR _EREGNT
+	JSR _EREGLIM
+	
+@LOOP
+	LDA FSTATE
+	STA FARG1
+	JSR _CPOFFS
+	LDY #UND_OFFS
+	LDA (CP_ADDR),Y
+	CLC
+	ADC #16
+	BCC @OVERFLOW
+	LDA #$FF
+@OVERFLOW
+	STA (CP_ADDR),Y
+	LDX FSTATE
+	INC V_EC,X
+	INC FSTATE
+	
+	LDA #$01
+	STA FARG2
+	LDA FSTATE
+	STA FARG3
+	JSR _EECD
+	
+	LDA FSTATE
+	CMP FVAR2
+	BNE @LOOP
+	
+	RTS
+;event_state_reconsider()
+_ERECONS
+	JSR _ESTATE
+	JSR _ECPOFFS
+	LDY #UND_OFFS
+	LDA (CP_ADDR),Y
+	CLC
+	ADC #32
+	BCC @OVERFLOW
+	LDA #$FF
+@OVERFLOW
+	STA (CP_ADDR),Y
+	RTS
+;event_state_decides()
+_EDECIDE
+	JSR _ESTATE
+	JSR _ECPOFFS
+	LDY #UND_OFFS
+	LDA (CP_ADDR),Y
+	CMP #32
+	BCC @ZERO
+	SEC
+	SBC #32
+	STA (CP_ADDR),Y
+	JMP @RTS
+@ZERO
+	LDA #$00
+	STA (CP_ADDR),Y
+@RTS
+	RTS
+
+_EFUNDS
+	;do nothing
+	RTS
+_EFUNDS2
+	LDX #$00
+@LOOP
+	LDA V_EVENTS,X
+	CMP EV_FUNDS
+	BEQ @HALVE
+	INX
+	CPX V_EVENTC
+	BNE @LOOP
+	BEQ @RTS
+@HALVE
+	LSR FRET3
+@RTS
+	RTS
+_EHEALTH
+	;do nothing
+	RTS
+_EHEALTH2
+	LDX #$00
+@LOOP
+	LDA V_EVENTS,X
+	CMP EV_HEALTH
+	BEQ @HALVE
+	INX
+	CPX V_EVENTC
+	BNE @LOOP
+	BEQ @RTS
+@HALVE
+	LSR FRET2
+@RTS
+	RTS
+
+;***MAJOR EVENTS***
+;all major events must store their region in V_EVBIG to avoid being reset!
+_EANARCHY
+	;pick a med/megastate
+	LDA #$00
+	STA FARG3
+	JSR _EECD2
+	LDX FAI
+	STA V_EVENTS+4,X
+	
+	JSR _ECPOFFS
+	LDA FARG1
+	STA FSTATE
+	;randomize STATE LEAN
+	LDY #UND_OFFS+1
+@LEANLP
+	LDA #$09
+	JSR _RNG
+	STA (CP_ADDR),Y
+	INY
+	CPY #$0A ;just fill out all LEAN
+	BNE @LEANLP
+	;randomize ISSUES
+	LDY #$00
+@ISSLP
+	LDA #$06
+	JSR _RNG
+	CLC
+	ADC #$01
+	STA (IS_ADDR),Y
+	INY
+	CPY #ISSUEC
+	BNE @ISSLP
+	;EC *= (0.75)
+	LDX FSTATE
+	LDA V_EC,X
+	LSR
+	LSR
+	STA FVAR4
+	LDA V_EC,X
+	SEC
+	SBC FVAR4
+	STA V_EC,X
+	;redistribute EC gains to any state (except the anarchy)
+@DECLOOP
+	LDA #STATE_C-1
+	JSR _RNG
+	TAX
+	INX
+	CPX FSTATE
+	BEQ @DECLOOP
+	INC V_EC,X
+	
+	DEC FVAR4
+	LDA FVAR4
+	BNE @DECLOOP
+	
+	RTS
+
+_ETV
+	JSR _EREGION
+	JSR _EVENTBIG
+	;do nothing
+	RTS
+
+_EVISIT
+	JSR _EREGION
+	JSR _EVENTBIG
+	;do nothing
+	RTS
+
+;event_terror_attack
+_ETERROR
+	LDX FAI
+	LDA V_EVENTS,X
+	STA V_EVBIG
+	
+	LDA #$01
+	STA FSTATE
+@LOOP
+	LDA FSTATE
+	STA FARG1
+	JSR _CPOFFS
+	LDY #UND_OFFS
+	LDA (CP_ADDR),Y
+	CLC
+	ADC #32
+	BCC @OVERFLOW
+	LDA #$FF
+@OVERFLOW
+	STA (CP_ADDR),Y
+	INC FSTATE
+	LDA FSTATE
+	CMP #STATE_C
+	BNE @LOOP
+	
+	RTS
+;checks if the above was called and sets MoE		
+_ETERROR2
+	LDA V_EVBIG
+	CMP #EV_TERROR
+	BNE @RTS
+	LDA V_MOE
+	CLC
+	ADC #10
+	STA V_MOE
+@RTS
+	RTS
+
+;***HELPER FUNCTIONS***
+_ECPINC
+	LDA (CP_ADDR),Y
+	CLC
+	ADC #$01
+	STA (CP_ADDR),Y
+	RTS
+_EISSINC
+	LDA (IS_ADDR),Y
+	CLC
+	ADC #$01
+	CMP #$07
+	BEQ @RTS
+	STA (IS_ADDR),Y
+@RTS
+	RTS
+_EISSDEC
+	LDA (IS_ADDR),Y
+	SEC
+	SBC #$01
+	BEQ @RTS
+	STA (IS_ADDR),Y
+@RTS
+	RTS
+_EISSCEN
+	LDA (IS_ADDR),Y
+	CMP #$05
+	BCS _EISSDEC
+	CMP #$03
+	BCC _EISSINC
+	RTS
+	
+_ECPOFFS
+	LDX FAI
+	LDA V_EVENTS+4,X
+	STA FARG1
+	JSR _CPOFFS
+	RTS
+
+_EREGLIM
+	LDX FAI
+	LDA V_EVENTS+4,X
+	AND #$0F
+	TAX
+	LDA D_REGLIM-1,X
+	STA FSTATE
+	LDA D_REGLIM,X
+	STA FVAR2
+	RTS
+
+;marks the region of this event into the major event region variable	
+_EVENTBIG
+	LDX FAI
+	LDA V_EVENTS+4,X
+	STA V_EVBIG
+	RTS
+
+;event_ec_delta(FARG2 = inc/dec bool, FARG3 = ignore state)
+;changes the EC of one mega/medstate
+_EECD
+	JSR _EECD2
+	TAX
+	LDA FARG2
+	BNE @DEC
+	INC V_EC,X
+	RTS
+@DEC
+	DEC V_EC,X
+	RTS
+;picks a medium or megastate
+_EECD2
+	LDA #$02
+	JSR _RNG ;half chance for a mega or medium state
+	BNE @MEGA
+	
+	LDA #MEGASTAC
+	JSR _RNG
+	TAX
+	LDA D_MEGAST,X
+	CMP FARG3
+	BEQ _EECD2
+	JMP @CHOOSE
+@MEGA
+	LDA #MEDSTAC
+	JSR _RNG
+	TAX
+	LDA D_MEDSTA,X
+	CMP FARG3
+	BEQ _EECD2
+@CHOOSE
+	RTS
+
+;event_on_in_state(A = event index)
+;state index in Y
+_EVENTON
+	CMP V_ETABLE,Y
+	RTS
+	

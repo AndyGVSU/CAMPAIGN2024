@@ -4,6 +4,7 @@
 
 ;map_view() 
 ;main SR for map viewing
+;saves state index to MAP_RES
 _MAP 
 	LDA #$02
 	STA SPRON
@@ -167,16 +168,9 @@ _MAPINFO
 	LDA #P_TOP
 	STA GX_CROW
 
-	LDA #$20
-	LDX #$00
-@CLRLOOP 
-	STA V_STRING,X
-	INX 
-	CPX #$0B
-	BNE @CLRLOOP
-	+__LAB2XY V_STRING
-
-
+	LDA #$0A
+	STA T_BLANKX+4
+	+__LAB2XY T_BLANKX
 	JSR _GX_STR
 
 	LDA MAP_RES
@@ -192,10 +186,8 @@ _MAPINFO
 	STA GX_DCOL
 
 	LDA MAP_RES
-	JSR _DRWPOST
+	JSR _DRWPOST2
 	LDX MAP_RES
-	INC GX_CCOL
-	INC GX_CCOL
 	JSR _DRWSTEC
 
 	INC GX_CCOL
@@ -244,15 +236,18 @@ _DRWBORD
 
 ;map_combo_1() 
 ;draws the border and map
-_MAPCMB1 
+_MAPCMB1
 	JSR _DRWBORD
 	JSR _DRWMAP
 	RTS 
 
 ;map_combo_2() 
 ;sets state control, colors and draws map (for game loop)
-_MAPCMB2 
+_MAPCMB2
 	JSR _STCTRL
+	LDA S_SKIPGAME
+	BNE @SKIPDRW
 	JSR _MAPCOL
 	JSR _DRWMAP
+@SKIPDRW
 	RTS 

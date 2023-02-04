@@ -38,8 +38,6 @@ _FTC
 _RSELECT 
 	TXA 
 	STA GX_CROW
-
-
 	STA FRET1
 _RSELSAV 
 	LDA #$01
@@ -175,9 +173,16 @@ _PERCEN2
 	LDA FARG4
 	LDY FARG3
 	JSR _162FAC
-	JSR _FDIVT ;FAC = ARG / FAC
+	JSR _DIVIDE ;FAC = ARG / FAC
 	JSR _CLRSTR
 	RTS 
+
+;divide_float()
+;jumps to FDIVT, but clears zero flag automatically (otherwise FDIVT throws an error)
+_DIVIDE
+	LDA #$01
+	JSR _FDIVT
+	RTS
 
 ;percent(smaller=farg1(L),f2(H); larger=f3,f4)
 ;ARGUMENTS ARE NOT POINTERS
@@ -186,6 +191,7 @@ _PERCEN2
 _PERCENT 
 	JSR _PERCEN2
 	JSR _FAC2STR ;float to str
+	JSR _PERCFMT
 	RTS 
 
 ;percent_format() 
@@ -194,29 +200,53 @@ _PERCFMT
 	JSR _STRPERC
 	LDA #00 ;draw 2 digits only
 	STA V_FPOINT+3
-	LDA #$25 ;%
+	LDA #VK_PERC
 	STA V_FPOINT+2
 
 	RTS 
 
 ;arg_to_float3() 
 ;transfers ARG to FLOAT3
-_ARG2F3 LDX #00
-@LOOP LDA ARG,X
+_ARG2F3 
+	LDX #00
+@LOOP 
+	LDA ARG,X
 	STA V_FLOAT3,X
 	INX 
 	CPX #FLOATLEN
 	BNE @LOOP
 	RTS 
 ;float3_to_arg() 
-_F32ARG LDX #00
-@LOOP LDA V_FLOAT3,X
+_F32ARG 
+	LDX #00
+@LOOP 
+	LDA V_FLOAT3,X
 	STA ARG,X
 	INX 
 	CPX #FLOATLEN
 	BNE @LOOP
 	RTS 
-
+;fac_to_float3() 
+;transfers FAC to FLOAT3
+_FAC2F3 
+	LDX #00
+@LOOP 
+	LDA FAC,X
+	STA V_FLOAT3,X
+	INX 
+	CPX #FLOATLEN
+	BNE @LOOP
+	RTS 
+;float3_to_fac() 
+_F32FAC 
+	LDX #00
+@LOOP 
+	LDA V_FLOAT3,X
+	STA FAC,X
+	INX 
+	CPX #FLOATLEN
+	BNE @LOOP
+	RTS 
 ;percent_string() 
 ;5-char percentage string from FAC zstr
 ;string at $0100
@@ -306,7 +336,8 @@ _STRPERC
 
 ;float_append_percent() 
 ;applies to V_FPOINT
-_FSTRAP LDA #$25
+_FSTRAP 
+	LDA #VK_PERC
 	STA V_FPOINT+5
 	LDA #00
 	STA V_FPOINT+6
@@ -314,9 +345,9 @@ _FSTRAP LDA #$25
 
 ;float_truncate_2() 
 ;cuts the string to two chars
-_FSTRT2 LDA #00
-	STA V_FPOINT+2
-	RTS 
+;_FSTRT2 LDA #00
+;	STA V_FPOINT+2
+;	RTS 
 
 ;clear_string() 
 _CLRSTR LDX #00
@@ -432,7 +463,7 @@ _RNG
 	SEC 
 	ROL RNG2
 @REROLL 
-	LDA $D41B
+	LDA VOICE3OUT
 	AND RNG2
 	CMP RNG1
 	BCS @REROLL
@@ -445,7 +476,6 @@ _RNG
 ;converts value to decimal INT, stores to string
 ;copy of ROM routine, does not print
 
-
 _INT 
 	STA FSUS1
 	STX FSUS2
@@ -457,14 +487,11 @@ _INT
 	STX FAC+2
 	LDX #$90
 	SEC 
-	JSR $BC49
-	JSR $BDDF
+	JSR _ABS2
+	JSR _FAC2STR2
 	RTS 
-
-;input() 
-;returns to A
-;keyboard only
-_INPUT 
+	
+_INPUT
 	JSR _GETINP
 	CMP #00
 	RTS 
@@ -612,7 +639,8 @@ _PLAYIN2
 	STA GX_CIND
 	JSR _GX_CHAR ;draw cursor
 	INC GX_CCOL
-_PLAYIN3 LDA #C_BLACK
+_PLAYIN3 
+	LDA #C_BLACK
 	STA GX_DCOL
 	LDA #$20
 	STA GX_CIND ;clear in front of cursor
@@ -622,16 +650,16 @@ _PLAYIN3 LDA #C_BLACK
 
 ;copy(farg1,farg2,farg3,farg4,farg5) 
 ;copies [length farg5] $(2,1) to $(4,3)
-_COPY LDX #00
+_COPY 
+	LDX #00
 	LDY #00
-@LOOP LDA (FARG1),Y
+@LOOP 
+	LDA (FARG1),Y
 	STA (FARG3),Y
 	INY 
 	CPY FARG5
 	BNE @LOOP
-	RTS 
-
-
+	RTS
 
 ;store_local_variables() 
 ;stores FVAR1-5 out of ZP
@@ -703,8 +731,9 @@ _CLRFAC
 @LOOP 
 	STA FAC,X
 	STA ARG,X
+	STA V_FLOAT3,X
 	INX 
-	CPX #$05
+	CPX #FLOATLEN
 	BNE @LOOP
 	RTS 
 
@@ -750,7 +779,6 @@ _CHARSET1
 	AND #$F0
 	ORA #$0E
 
-
 	STA $D018
 	RTS 
 ;different characters
@@ -760,12 +788,37 @@ _CHARSET2
 	JSR _CHARSET3
 
 	LDX #$29
-	LDY #$08
+	LDY #$08 * 1
 	JSR _CHARSET3
 
 	LDX #$3B
-	LDY #$10
+	LDY #$08 * 2
 	JSR _CHARSET3
+	
+	LDX #$1C
+	LDY #$08 * 3
+	JSR _CHARSET3
+	
+	LDX #$1E
+	LDY #$08 * 4
+	JSR _CHARSET3
+	
+	LDX #$1F
+	LDY #$08 * 5
+	JSR _CHARSET3
+	
+	LDA #<D_EXCHAR+(CHARLEN*6)
+	STA FARG1
+	LDA #>D_EXCHAR+(CHARLEN*6)
+	STA FARG2
+	LDA #<NEWCHAR+(CHARLEN*64)
+	STA FARG3
+	LDA #>NEWCHAR+(CHARLEN*64)
+	STA FARG4
+	LDA #(CHARLEN*31)
+	STA FARG5
+	JSR _COPY
+	
 	RTS 
 
 ;add extra character
@@ -790,8 +843,9 @@ _CHARSET3
 ;move_cp_to_max(CP_ADDR preset)
 ;moves CP data per player to V_MAX
 _CPTOMAX
+	JSR _MAXR
 	LDY #01
-	LDX #00
+	LDX #01
 @MAXLOOP 
 	LDA (CP_ADDR),Y
 	STA V_MAX,X
@@ -802,52 +856,18 @@ _CPTOMAX
 	BNE @MAXLOOP
 	RTS
 
-;moves game data out of new charset area
-; _COPYDAT 
-	; +__LAB2O DATA2024
-	; LDA OFFSET
-	; STA CP_ADDR
-	; LDA OFFSET+1
-	; STA CP_ADDR+1
-	; +__LAB2O _DATACOPY
 
-	; LDA #<DATASIZE
-	; STA HS_ADDR
-	; LDA #>DATASIZE
-	; STA HS_ADDR+1
-
-	; LDA #>_DATACOPY
-	; CLC 
-	; ADC HS_ADDR+1
-	; STA HS_ADDR+1
-
-	; LDA #<_DATACOPY
-	; CLC 
-
-
-	; ADC HS_ADDR
-	; STA HS_ADDR
-	; BCC @CARRYH
-	; INC HS_ADDR+1
-; @CARRYH 
-
-	; LDY #00
-; @LOOP 
-	; LDA (OFFSET),Y
-	; STA (CP_ADDR),Y
-
-	; INC OFFSET
-	; BNE @CARRY
-	; INC OFFSET+1
-; @CARRY 
-	; INC CP_ADDR
-	; BNE @CARRY2
-	; INC CP_ADDR+1
-; @CARRY2 
-	; LDA OFFSET
-	; CMP HS_ADDR
-	; BNE @LOOP
-	; LDA OFFSET+1
-	; CMP HS_ADDR+1
-	; BNE @LOOP
-	; RTS 
+;set_player_limits(A = player count)
+_SETPLIM
+	STA S_PLAY1L
+	STA S_PLAY1M
+	DEC S_PLAY1L
+	INC S_PLAY1M
+	RTS
+	
+;popular_float_to_offset(Y = party index)
+_POP2OFF
+	+__LAB2O V_POPULAR
+	LDX #FLOATLEN
+	JSR _OFFSET
+	RTS

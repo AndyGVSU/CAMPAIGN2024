@@ -46,59 +46,45 @@ _MAXPL
 
 ;state_control() 
 ;executes _PCTRL for all states
-_STCTRL 
+_STCTRL
 	JSR _CPOFFR
 	LDA #01
 	STA FSTATE
 @LOOP 
 	JSR _PCTRL
 	LDX FSTATE
-	STA V_CTRL,X
-
-	JSR _CPOFFI
-	INC FSTATE
-	LDA FSTATE
-
-
-	CMP #STATE_C
-	BNE @LOOP
-	RTS 
-
-;color_map() 
-;maps party control for all states to map color
-;does NOT set party control -- use _STCTRL or _FINALCP
-_MAPCOL 
-	JSR _CPOFFR
+	PHA
+	TAY
+	LDA V_WEEK
+	CMP #$01 
+	BEQ @EQUAL ;no delta week 1
+	TYA
+	CMP V_CTRL,X ;set control change
+	BEQ @EQUAL
 	LDA #01
-	STA FSTATE
-@LOOP 
-	LDX FSTATE
-	LDA V_CTRL,X
-	TAY 
-	LDA V_PTCOL,Y
-	STA V_STCOL,X
-
-	LDA V_COLMSK,X
-	BEQ @SKIPMSK ;if mask is nonzero, blank state
-	LDY #UND_PRTY
-	LDA V_PTCOL,Y
-	STA V_STCOL,X
-@SKIPMSK 
-
+	BNE @STORE
+@EQUAL
+	LDA #00
+@STORE
+	STA V_CTRLD,X
+	PLA
+	STA V_CTRL,X
+	
 	JSR _CPOFFI
 	INC FSTATE
 	LDA FSTATE
+	
 	CMP #STATE_C
 	BNE @LOOP
 	RTS 
 
-;get_party_control(cp_addr) 
+;get_party_control_by_margin(cp_addr) 
 ;gets highest,second-highest cp values
-;if difference out of total is >=10% (>=3% for 4 players), max index, else UND
+;if [difference out of total] >= [current MoE], max index, else UND.
 ;LOCAL: FVAR1-5
 _PCTRL 
 	LDA #00
-	STA S_DRWUND
+	STA S_SUMUND ;party control is never decided by UND
 	STA FVAR4
 	JSR _POPSUMR ;clear V_POPSUM
 	LDA #00
@@ -112,33 +98,23 @@ _PCTRL
 	JMP @SKIPCHK
 @CLASSC
 	
-	LDA S_PLAYER
-	CMP #$04
-	BNE @4P
-	LDA V_FPOINT
-	AND #$0F
-	BNE @4P
+	JSR _F32FAC
+	JSR _FMUL10
+	JSR _FMUL10 ;multiply by 100 (percentage)
+	JSR _FAC216
+	TYA
 	
-	LDA V_FPOINT+1
-	AND #$0F
-	CMP #$03
+	CMP V_MOE
 	BCC @UND
-	JMP @SKIPCHK
-@4P
-	LDA V_FPOINT
-	AND #$0F
-	BEQ @UND
 @SKIPCHK
 	DEC FVAR4
 	LDA FVAR4
-	RTS 
+	RTS
 @UND
 	LDA #UND_PRTY
 	RTS 
 
-;margin() 
-
-
+;margin()
 ;gets % margin between top two states (by CP)
 ;if tie, returns #00, else #01
 ;LOCAL: FVAR1-4
@@ -253,7 +229,7 @@ _TMARGIN
 ;combo call
 _TMARGIN2
 	LDA #00
-	STA S_DRWUND
+	STA S_SUMUND ;never uses UND
 	JSR _STATSUM
 	LDA V_PARTY
 	STA FARG1
@@ -286,6 +262,7 @@ _MARGFMT
 	JSR _PERCEN2
 	JSR _F32ARG ;FLOAT3 to ARG
 	JSR _FSUBT ;FAC = ARG - FAC
+	JSR _FAC2F3 ;copy FAC result to float3
 	JSR _FAC2STR ;FAC to string
 	LDA FVAR2
 	STA FVAR4 ;move potential party
@@ -293,272 +270,4 @@ _MARGFMT
 	LDA #$01 ;return non-zero
 	RTS 
 
-;und_setup() 
-_UNDCP 
-	JSR _CPOFFR
-	LDA #01
-	STA FSTATE
-@LOOP 
-	LDX FSTATE
-	LDA #147
-	CLC 
-	ADC V_EC,X
-	ADC V_EC,X
-	;255 - (54 - EC);2 = 147 + EC;2
-	LDY #UND_OFFS
-	STA (CP_ADDR),Y
-	JSR _CPOFFI
-	INC FSTATE
-	LDA FSTATE
-	CMP #STATE_C
-	BNE @LOOP
-	RTS 
 
-;max2nd() 
-;max2() but instead gets the second highest value
-;only guaranteed a second value, not a second party
-;quits if initial tie
-_MAX2ND
-	JSR _MAX2
-	
-	BEQ @TIE
-	ASL 
-	TAY 
-	DEY 
-	DEY 
-	LDA #$00
-	STA V_MAX,Y
-	STA V_MAX+1,Y
-	JSR _MAX2
-@TIE 
-	RTS 
-
-;max2() 
-;2B maximum where values are (L)(H) pairs in V_MAX
-;LOCAL: FRET1-2
-;returns to MAXLOW/MAXHIGH; if not tie, A = index
-_MAX2 
-	LDX #01
-	JSR _MAXA
-	LDX #01
-	JSR _MAXB
-	PHA 
-	LDA FRET1
-	STA MAXHIGH
-	PLA 
-	BNE @NOTTIE
-	LDX #00
-	JSR _MAXA
-	LDX #00
-	JSR _MAXB
-	PHA 
-	LDA FRET1
-	STA MAXLOW
-	PLA 
-@NOTTIE 
-	RTS 
-
-;max_a(x = V_MAX offset)
-;FRET1 = maximum value
-;put maximum value in FRET1
-_MAXA 
-	LDY #$01
-	LDA #00
-	STA FRET1
-	STA FRET2
-@LOOP 
-	LDA V_MAX,X
-	CMP FRET1
-	BCC @SKIPSTA
-	STA FRET1
-@SKIPSTA 
-	INX 
-	INX 
-	INY 
-	CPY S_PLAY1M
-	BNE @LOOP
-
-	RTS 
-
-
-;max_b(X = V_MAX offset)
-;returns A = index + 1 (0 for tie)
-_MAXB 
-
-	LDY #01
-@RLOOP 
-	LDA V_MAX,X
-	CMP FRET1
-	BNE @SKIP
-	LDA FRET2
-	BNE @TIE
-	STY FRET2
-@SKIP 
-	INX 
-	INX 
-	INY 
-	CPY S_PLAY1M
-	BNE @RLOOP
-
-	LDA FRET2
-	RTS 
-@TIE 
-	LDA #00
-	RTS 
-
-;max_reset() 
-_MAXR 
-	LDX #00
-	LDA #00
-@LOOP 
-	STA V_MAX,X
-	INX 
-	CPX #$08
-	BNE @LOOP
-	RTS 
-
-;pop_sum_reset() 
-;clears V_POPSUM
-_POPSUMR 
-	LDX #00
-	LDA #00
-@LOOPCLR STA V_POPSUM,X
-	INX 
-	CPX #$0C
-	BNE @LOOPCLR
-	RTS 
-
-;popular_vote_sum() 
-;draw_und set beforehand
-;sums ALL state cp by party, returns to v_popsum
-_POPSUM 
-	LDA #00
-	STA HS_ADDR
-	LDA #$01
-	STA FSTATE
-	JSR _CPOFFR
-@STLOOP
-
-	JSR _STATSUM
-	JSR _CPOFFI
-	INC FSTATE
-	LDA FSTATE
-	CMP #STATE_C
-	BNE @STLOOP
-	RTS 
-
-;popsum_combo() 
-_POPSUM1 
-	JSR _POPSUMR
-	JSR _GAINSUM
-;JSR _POPSUM ;takes drw_und
-	RTS 
-
-;popsum_draw_combo() 
-_POPCOM1 
-	;LDA #01
-	;STA V_SUMFH
-	JSR _POPSUM1
-	LDA #STATE_C
-	STA FARG5
-	JSR _DRWPOP
-	RTS 
-
-;cp_gain_sum() 
-;transfers total action-earned CP by party to V_POPSUM
-_GAINSUM 
-	LDX #00
-@LOOP 
-	LDA V_ALLCP,X
-	STA V_POPSUM,X
-	INX 
-	CPX #$0C
-	BNE @LOOP
-	RTS 
-
-;percent_state(Y = party index * 2)
-;divides state CP by total, formats
-_PERCSTA 
-	LDA V_POPSUM,Y
-	STA FARG1
-	LDA V_POPSUM+1,Y
-	STA FARG2
-	LDA V_POPSUM+10
-	STA FARG3
-	LDA V_POPSUM+11
-	STA FARG4
-	JSR _PERCENT
-	JSR _PERCFMT
-	RTS 
-
-;state_control_count(A = party)
-;counts the number of states party A is winning
-;(only on the map)
-;returns to A
-;LOCAL: FRET1,FY1
-_CTRLCNT 
-	TAY 
-
-
-	STY FY1
-	LDX #01
-	LDA #00
-	STA FRET1
-@LOOP 
-	LDA V_CTRL,X
-	CMP FY1
-	BNE @SKIPADD
-	INC FRET1
-@SKIPADD 
-	INX 
-	CPX #STATE_C
-	BNE @LOOP
-	RTS 
-
-;state_cp_sum() 
-;sums all candidates' CP at current CP_ADDR/HS_ADDR
-;if draw_und is set, adds UND to total as well
-;adds result to V_POPSUM; for single-use, clear first
-_STATSUM 
-	LDY #01
-@LOOP 
-	JSR _STATSM2
-	CLC 
-	ADC V_POPSUM+10
-	STA V_POPSUM+10
-	BCC @NOC
-	INC V_POPSUM+11
-@NOC 
-	DEY 
-	TYA 
-	ASL 
-	TAX 
-	INY 
-	JSR _STATSM2
-	CLC 
-	ADC V_POPSUM,X
-	STA V_POPSUM,X
-	BCC @NOC2
-	INC V_POPSUM+1,X
-@NOC2 
-	INY 
-	CPY S_PLAY1M ;loop per player
-	BCC @LOOP
-	CPY #UND_OF1M
-	BEQ @RTS
-
-	LDY #UND_OFFS
-	LDA S_DRWUND
-	BEQ @RTS ;if draw und off, ignore
-	JMP @LOOP ;if on, add UND
-@RTS 
-	RTS 
-;sum from history check
-_STATSM2 
-	LDA V_SUMFH
-	BEQ @FROMCP
-	LDA (HS_ADDR),Y
-	RTS 
-@FROMCP 
-	LDA (CP_ADDR),Y
-	RTS 

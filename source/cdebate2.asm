@@ -67,7 +67,7 @@ _DAMENU
 	RTS 
 ;debate_secondary_menu_draw() 
 _DSMENU 
-	JSR _CLRSCHD
+	JSR _CLRBR
 	+__COORD P_DSMR,P_DSMC
 	+__LAB2XY T_BACK
 	JSR _GX_STR
@@ -215,7 +215,7 @@ _DSTATUS
 ;debate_clear_screen() 
 _DCLEAR 
 	JSR _CLRBL
-	JSR _CLRSCHD
+	JSR _CLRBR
 	JSR _DCLRMR
 	JSR _DUPNEXT
 	
@@ -346,7 +346,10 @@ _DAISATK
 	RTS
 
 ;debate_log_view()
-_DLOG 
+_DLOG
+	LDA S_SKIPGAME
+	BNE @RTS
+	
 	JSR _DSMENU
 	JSR _DFINAL
 
@@ -357,6 +360,7 @@ _DLOG
 	LDY #P_DLOGMR3
 	JSR _RSELECT
 	BEQ @VIEWLOG
+@RTS
 	RTS 
 @VIEWLOG 
 	LDA #00
@@ -418,7 +422,6 @@ _DFAVOR
 	STA GX_CCOL
 	
 	JSR _PERCENT
-	JSR _PERCFMT
 	+__LAB2XY V_FPOINT
 	JSR _GX_STR
 	
@@ -430,7 +433,6 @@ _DFAVOR
 	STA FARG2
 	
 	JSR _PERCENT
-	JSR _PERCFMT
 	+__LAB2XY V_FPOINT
 	JSR _GX_STR
 	
@@ -619,10 +621,7 @@ _DQRESLT
 @ISACT
 	JSR _DQRES3
 	BNE @ACTLOOP
-
-	LDA $8000
-	STA $8001
-
+	
 	JSR _DQRES2
 @RCTLOOP
 	LDA #00
@@ -642,7 +641,10 @@ _DQRESLT
 	BNE @RCTLOOP
 
 	JSR _DQRES2
-@CLEAR 
+@CLEAR
+	LDA S_SKIPGAME
+	BNE @SKIPG
+	
 	JSR _DRWBORD2
 
 	+__COORD P_DQAR,P_DQAC
@@ -653,7 +655,7 @@ _DQRESLT
 
 	JSR _DDRWAUD
 	JSR _FTC
-
+@SKIPG
 	JSR _DQRES3
 	BNE @CLEAR
 	
@@ -1161,11 +1163,11 @@ _DRCTEX7
 @RTS
 	RTS
 ;debate reaction success (attacker)
-_DASUCC
-	LDA #$01
-	LDY #$03
-	STA (OFFSET2),Y
-	RTS
+;_DASUCC
+;	LDA #$01
+;	LDY #$03
+;	STA (OFFSET2),Y
+;	RTS
 ;debate reaction success (defender)
 _DDSUCC
 	LDA #$01
@@ -1173,11 +1175,11 @@ _DDSUCC
 	STA (OFFSET2),Y
 	RTS
 ;debate reaction failure (attacker)
-_DAFAIL
-	LDA #$00
-	LDY #$03
-	STA (OFFSET2),Y
-	RTS
+;_DAFAIL
+;	LDA #$00
+;	LDY #$03
+;	STA (OFFSET2),Y
+;	RTS
 ;debate reaction failure (defender)
 _DDFAIL
 	LDA #$00
@@ -2051,7 +2053,7 @@ _AVGISSU
 	LDA #$00
 	LDY #$05
 	JSR _162FAC
-	JSR _FDIVT
+	JSR _DIVIDE	
 	JSR _FAC2STR
 	LDA V_STRING+2
 	BNE @SKIP

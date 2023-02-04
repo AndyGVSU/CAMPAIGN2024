@@ -8,19 +8,21 @@
 _AI 
 	LDX V_PARTY
 	LDA V_AI,X
+	STA SAVEAI
 	BEQ @RTS
-	CMP #$03
-	BEQ @HARD2
-	CMP #$02
-	BEQ @HARD
+	LDA SAVEAI
+	CMP #AIPSYCH
+	BEQ @PSYCH
+	CMP #AINORM
+	BCS @HARD
 	JSR _EASY
+	BNE @RTSAI
+@PSYCH
+	;JSR _PSYCHAI
 	JMP @RTSAI
-@HARD2 
-	JSR _HARD2
-	JMP @RTSAI
-@HARD 
-	JSR _HARD
-@RTSAI 
+@HARD
+	JSR _HARDAI
+@RTSAI
 	LDA #01
 	RTS 
 @RTS 
@@ -28,6 +30,7 @@ _AI
 
 ;easy_ai() 
 _EASY 
+	JSR _SCHCLR
 	;set random region
 	LDA #$09
 	JSR _RNG
@@ -35,14 +38,14 @@ _EASY
 	ADC #$01
 	STA C_CREG
 
-	LDA #$03
+	LDA #ACT_REST
 	JSR _SCHADD
-	LDA #$03
+	LDA #ACT_REST
 	JSR _SCHADD
 	;rest twice
-	LDA #$02
+	LDA #ACT_FUNDR
 	JSR _SCHADD
-	LDA #$02
+	LDA #ACT_FUNDR
 	JSR _SCHADD
 	;fundraise twice
 @VISIT 
@@ -54,7 +57,7 @@ _EASY
 	CLC 
 	ADC D_REGLIM-1,X
 	STA FARG1
-	LDA #$00
+	LDA #ACT_REST
 	JSR _SCHADD
 
 	LDA C_SCHEDC
@@ -63,23 +66,167 @@ _EASY
 	CMP #$06
 	BNE @VISIT
 	;campaign in two random states
-	LDA #$01
+	LDA #ACT_TVADS
 	JSR _SCHADD
 	;tv ads in region
 	LDA #01
 	RTS 
 
-;hard_ai() 
-_HARD 
+;generic_hard_ai()
+_HARDAI
 	JSR _AICLRP
-	JSR _AIHLIST ;generate priority list
-@RECALC 
+	
+	LDA SAVEAI
+	CMP #AINORM
+	BNE @NEXT
+	JSR _AIHLIST
+	JMP @LISTED
+@NEXT
+	JSR _AIHLIST2
+	JSR _AISURVEY ;apply survey
+	JSR _AIPOLL2 ;apply polls (works in tandem with SURVEY: finds UND states with 0 UND, then POLLS that region to find the margin and removes them from the SURVEY list if they're still worth going to)
+	JSR _AIHLIST2 ;recalculate with polls
+@LISTED	
+	LDA SAVEAI
+	CMP #AIPSYCH
+	BEQ @SKIPCLR
 	JSR _SCHCLR
-
+@SKIPCLR
+	;var init
 	LDA #00
 	STA FAI
 	STA FAITV ;tv ads limit
-	;week 9 guarantees TV ADS
+	STA FARG5 ;max TV priority
+	STA FAIPTR
+	LDA #$03
+	STA FAIPRI
+		
+	JSR _SCHFULL ;SAFETY CHECK
+	BNE @FULLCHK
+	JMP @DONE
+@FULLCHK
+
+	;AUX REST/FUNDR ON EVEN WEEKS
+	LDA SAVEAI
+	CMP #AIPSYCH
+	BEQ @SKIPAUX
+	JSR _AIHAUX
+@SKIPAUX
+	LDA SAVEAI
+	CMP #AINORM
+	BNE @WEEK9
+	JSR _NORMW9
+@WEEK9
+	
+	;MAIN LOOP
+@LOOP1
+
+	LDA V_CPGPTR
+	STA FAIPTR
+	
+	;OUT OF PRIORITIZED STATES
+	LDA FAIPRI
+	CMP #$FF
+	BNE @NOTOUT
+	JSR _AISAFE
+	LDA FRET1
+	JMP @VISIT
+@NOTOUT
+	
+	;WARNING PREVENTION	
+	JSR _NOTLAST
+	BNE @SKIPPREV
+	JSR _LDAPCFC 
+	CMP #20
+	BCC @FUNDR 
+	JSR _LDAPCHC
+	CMP #20
+	BCC @REST
+@SKIPPREV
+	;OUT OF USABLE PRIORITY STATES
+	LDX FAI
+	LDA V_PRIOR,X
+	CMP FAIPRI
+	BEQ @CONTINU
+	JMP @INC
+@CONTINU
+	
+	LDA V_PRIOR2,X
+	BEQ @INC
+	BMI @TVADS
+@VISIT
+	STA FARG1
+	LDA V_VBONUS
+	AND #$7F
+	CMP FARG1
+	BNE @NOPENAL
+	LDA V_VBONUS
+	BPL @NOPENAL ;if VISIT penalty
+	JMP @INC
+@NOPENAL
+	LDA FARG1
+	JSR _AISETREG
+	
+	JSR _HARDW9 ;week 9 end with TV ADS if enough money/health
+	BNE @TVLIMIT
+	
+	LDA #ACT_VISIT
+	JSR _SCHADD
+	
+	LDA C_SCHEDC
+	CMP #$01
+	BNE @TWICE ;visit highest-priority state twice on odd weeks (not week 1, and if TV ADS is not first)
+	LDA V_WEEK
+	CMP #$01
+	BEQ @TWICE
+	LDA FARG1
+	JMP @VISIT
+@TWICE
+	JMP @INC
+@TVADS 
+	AND #$0F
+	STA C_CREG
+
+	INC FAITV
+	LDA FAITV
+	CMP #03 ;no more than 2 TV ADS
+	BCC @TVLIMIT
+	JMP @INC
+@TVLIMIT 
+	LDA #ACT_TVADS
+	JSR _SCHADD
+	LDA V_WARN
+	BEQ @TVOK
+	DEC C_SCHEDC
+@TVOK
+	JMP @INC
+
+@FUNDR
+	LDA #ACT_FUNDR
+	JSR _SCHADD
+	JMP @FULL
+@REST 
+	LDA #ACT_REST
+	JSR _SCHADD
+	JMP @FULL
+@INC 
+	INC FAI
+	LDA FAI
+	CMP #AISTATE
+	BNE @DECPRI
+	DEC FAIPRI
+	LDA #$00
+	STA FAI
+@DECPRI
+@FULL
+	JSR _SCHFULL
+	BEQ @DONE
+	JMP @LOOP1
+@DONE 
+	RTS 
+	
+;normal_ai_week9
+_NORMW9
 	LDA V_WEEK
 	CMP #$09
 	BNE @GARANTV
@@ -88,282 +235,98 @@ _HARD
 	LDA V_PRIOR2,X
 	BPL @NOTTV
 	STA V_PRIOR2+6 ;last action; if surplus, kept
-	JMP @LOOP1
+	;JMP @LOOP1
+	RTS
 @NOTTV 
 	INX 
 	CPX #$1D
 	BNE @WEEK9LP
-@GARANTV 
-	;do aux rest/fundr on even weeks
+@GARANTV 	
+	RTS 
+
+;ai_hard_week_9()
+_HARDW9
 	LDA V_WEEK
-	AND #$01
-	BNE @ODD
-	JSR _AIHAUX
-@ODD 
-
-@LOOP1 ;fill schedule with priority
-	LDA V_CPGPTR
-	STA FAIPTR
-
-	JSR _LDAPCFC ;avoid out of money
-	CMP #$14 ;i.e. < 20 funds
-	BCS @OUTOFM
-	LDA V_WEEK ;BUT don't if week 9
 	CMP #$09
-	BNE @FUNDR
-@OUTOFM 
-	LDX FAI
-	LDA V_PRIOR2,X
-	BEQ @REST
-	CMP #$FF
-
-	BEQ @FUNDR
-	LDA V_PRIOR2,X
-	BMI @TVADS
-	STA FARG1
-	LDA V_VBONUS
-	AND #$7F
-	CMP FARG1
-	BNE @NOPENAL
-	LDA V_VBONUS
-	BPL @NOPENAL ;if VISIT penalty
-	LDA V_PRIOR2+1,X
-	STA V_PRIOR2,X
-@NOPENAL 
-	LDA #00
-	JSR _SCHADD
-	JMP @INC
-@TVADS 
-	AND #$0F
-	STA C_CREG
-
-	LDA V_WEEK
-	AND #$01
-	BEQ @CUTTV
-
-	INC FAITV
-	LDA FAITV
-	CMP #03 ;no more than 2 TV ADS
-	BCC @TVLIMIT
-@CUTTV 
-	JSR _AIHCUT
-	JMP @INC
-@TVLIMIT 
-	LDA #01
-	JSR _SCHADD
-	JMP @INC
-@FUNDR 
-	LDA #$02
-	JSR _SCHADD
-	JMP @INC
-@REST 
-	LDA #$03
-	JSR _SCHADD
-	JMP @INC
-@INC 
-	INC FAI
-	JSR _SCHFULL
-	BNE @LOOP1
-@DONE 
-	RTS 
-
-;hard_ai() 
-_HARD2
-	+__LAB2O V_AIH2MEM
-	LDX V_PARTY
-	LDY #AISTATE
-	JSR _OFFSET
-	+__O2O2
-
-	JSR _AICLRP
-	JSR _AIHLIST2 ;generate priority list
-	JSR _AICENS2
-	JSR _AIHLIST2 ;recalculate with census
-	JSR _SCHCLR
-
+	BNE @FALSE
+	LDA C_SCHEDC
+	CMP #$06
+	BNE @FALSE
+	JSR _LDAPCF
+	CMP #15
+	BCC @FALSE
+	JSR _LDAPCH
+	CMP #30
+	BCC @FALSE
+	
+	LDA FARG1
+	JSR _STATEGR
+	STX C_CREG
+	LDA #$01
+	BNE @RTS
+@FALSE
 	LDA #$00
-	STA FARG5 ;max TV priority
-	STA FAIPTR
+@RTS
+	RTS
 
-@RECALC 
-	LDA #00
-	STA FAI
-	STA FAITV ;tv ads limit
-	;week 9 guarantees TV ADS
-	; LDA V_WEEK
-	; CMP #$0A ;REPLACE?
-	; BNE @GARANTV
-	; LDX #$07
-; @WEEK9LP 
-	; LDA V_PRIOR2,X
-	; BPL @NOTTV
-	; STA V_PRIOR2+6 ;last action; if surplus, kept
-	; JMP @LOOP1
-; @NOTTV 
-	; INX 
-	; CPX #AISTATE
-	; BNE @WEEK9LP
-; @GARANTV 
-	;do aux rest/fundr on even weeks
-	LDA V_WEEK
-	AND #$01
-	BNE @ODD
-	JSR _AIHAUX
-@ODD
-
-@LOOP1 ;fill schedule with priority
-	LDA V_CPGPTR
-	STA FAIPTR
-	
-	JSR _LDAPCFC ;avoid low funds
-	CMP #20
-	BCC @FUNDR
-	; BCS @OUTOFM
-	; LDA V_WEEK ;BUT don't if week 9
-	; CMP #$09
-	; BNE @FUNDR
-; @OUTOFM 
-	JSR _LDAPCHC
-	CMP #20
-	BCC @REST
-	; BCS @OUTOFH
-	; LDA V_WEEK ;BUT don't if week 9
-	; CMP #$09
-	; BNE @REST
-; @OUTOFH
-
-	LDX FAI
-	LDA V_PRIOR2,X
-	;BEQ @REST
-	;CMP #$FF
-	;BEQ @FUNDR
-	
-	LDA V_PRIOR,X
-	BNE @CONTINU
-	JMP @INC
-@CONTINU
-	
-	LDA V_PRIOR2,X
-	BEQ @INC
-	BMI @TVADS
-	STA FARG1
-	LDA V_VBONUS
-	AND #$7F
-	CMP FARG1
-	BNE @NOPENAL
-	LDA V_VBONUS
-	BPL @NOPENAL ;if VISIT penalty
-	LDA V_PRIOR2+1,X
-	STA V_PRIOR2,X
-@NOPENAL 
-	LDA #00
-	JSR _SCHADD
-	JMP @INC
-@TVADS 
-	AND #$0F
-	STA C_CREG
-
-	LDA V_WEEK
-	AND #$01 ;no TV ADS on even weeks
-	BNE @ODDWEEK
-	JMP @INC
-@ODDWEEK
-
-	INC FAITV
-	LDA FAITV
-	CMP #03 ;no more than 2 TV ADS
-	BCC @TVLIMIT
-	JMP @INC
-;@CUTTV 
-;	JSR _AIHCUT
-;	JMP @INC
-@TVLIMIT 
-	LDA #01
-	JSR _SCHADD
-	LDA V_WARN
-	BEQ @TVOK
-	DEC C_SCHEDC
-@TVOK
-	JMP @INC
-@FUNDR 
-	LDA #$02
-	JSR _SCHADD
-	JMP @INC
-@REST 
-	LDA #$03
-	JSR _SCHADD
-	JMP @INC
-@INC 
-	INC FAI
-	;JSR _HARD22
-	JSR _SCHFULL
-	BEQ @DONE
-	JMP @LOOP1
-@DONE 
-	RTS 
-;week 9 TV ADS dump
-; _HARD22
-	; LDA C_SCHEDC
-	; CMP #$05
-	; BNE @RTS
-	
-	; LDA V_WEEK
-	; CMP #$09
-	; BNE @RTS
-	
-	; LDX #00
-	; STX FAIMUL ;region
-; @REGLOOP
-	; LDX FAIMUL
-	; LDA V_AIPOLL,X
-	; BEQ @NOPOLL
-	
-	; JSR _LDAPCFC ;avoid excessive TV ADS
-	; CMP #$14 ;i.e. < 20 funds
-	; BCC @NOPOLL
-	
-	; LDX FAIMUL
-	; STX C_CREG
-	; INC C_CREG
-	; LDA #01
-	; JSR _SCHADD
-	
-; @NOPOLL
-	; INC FAIMUL
-	; LDX FAIMUL
-	; CPX #$0A
-	; BNE @REGLOOP
-; @RTS
-	; RTS
-
-;ai_hard_shift_schedule() 
-;shifts schedule down 1 from current point
-_AIHSHFT 
-	LDX #$1D
-@LOOP 
-	LDA V_PRIOR2-1,X
-	STA V_PRIOR2,X
-
-
-	DEX 
-	CPX C_SCHEDC
+;ai_safe()
+;picks a random state that is not under its control
+;returns to FRET1
+_AISAFE
+	TXA
+	PHA
+	LDX #00
+	STX FVAR6
+	LDA #$01
+	STA FSTATE
+@LOOP
+	LDX FSTATE
+	LDA V_CTRL,X
+	CMP V_PARTY
+	BEQ @SKIP
+	LDY FVAR6
+	TXA
+	STA SCRATCH,Y
+	INC FVAR6
+@SKIP
+	INC FSTATE
+	LDA FSTATE
+	CMP #STATE_C
 	BNE @LOOP
-	RTS 
+	
+	LDA FVAR6
+	CMP #$02
+	BCC @RANDOM
+	JSR _RNG
+	TAX
+	LDA SCRATCH,X
+	JMP @RTS
+@RANDOM
+	LDA #STATE_C
+	JSR _RNG
+@RTS
+	STA FRET1
+	PLA
+	TAX
+	RTS
+	
+	
 
-;ai_hard_cut_schedule() 
-;removes the next-queued action from the schedule
-_AIHCUT 
-	LDX C_SCHEDC
-	LDA V_PRIOR2
-	BEQ @RTS ;no more to cut
-@LOOP 
-	LDA V_PRIOR2+1,X
-	STA V_PRIOR2,X
-	INX 
-	CPX #$1D
-	BNE @LOOP
-@RTS 
-	RTS 
+
+;action_not_last()
+;returns 1 if week = 9 AND schedule count = 6
+_NOTLAST
+	LDA V_WEEK
+	CMP #$09
+	BNE @FALSE
+	LDA C_SCHEDC
+	CMP #$06
+	BNE @FALSE
+	LDA #$01
+	RTS
+@FALSE
+	LDA #00
+	RTS
 
 ;clear_priority_values()
 _AICLRP 
@@ -371,8 +334,9 @@ _AICLRP
 	TAX 
 @CLRLOOP ;for second pass ONLY
 	STA V_PRIOR,X
+	STA V_PRIOR2,X
 	INX 
-	CPX #$1D
+	CPX #AISTATE
 	BNE @CLRLOOP
 	JSR _AICLRPL
 
@@ -381,40 +345,45 @@ _AICLRP
 ;auxiliary_rest() 
 ;does REST/FUNDRAISE conditionally
 _AIHAUX 
-
+	LDA V_WEEK
+	AND #$01
+	BEQ @ODD
+	RTS
+@ODD
+	
 	JSR _LDAPCF
 	CMP #128 ;1 if FUNDS < 128
 	BCS @SECOND
 
-	LDA #02
+	LDA #ACT_FUNDR
 	JSR _SCHADD
 
 	JSR _LDAPCF
 	CMP #100
 	BCS @SECOND
 
-	LDA #02
+	LDA #ACT_FUNDR
 	JSR _SCHADD
 
 	JSR _LDAPCF
 	CMP #80
 	BCS @SECOND
 
-	LDA #02
+	LDA #ACT_FUNDR
 	JSR _SCHADD
 @SECOND 
 	JSR _LDAPCH
 	CMP #128
 	BCS @RTS
 	
-	LDA #03
+	LDA #ACT_REST
 	JSR _SCHADD
 
 	JSR _LDAPCH
 	CMP #128
 	BCS @RTS
 	
-	LDA #03
+	LDA #ACT_REST
 	JSR _SCHADD
 @RTS 
 	RTS 
@@ -429,11 +398,11 @@ _SCHFULL
 _AIHLIST ;set up index list
 	LDA #00
 	TAX 
-	STA V_PRIOR2+29
+	STA V_PRIOR2+AISTATE
 
 	TAY 
 	LDX #01
-	STA V_AIPOLC
+	STA V_POLLCT
 @SLOOP 
 	LDA V_EC,X
 	CMP #$0A
@@ -451,8 +420,6 @@ _AIHLIST ;set up index list
 @TVLOOP 
 	TXA 
 	ORA #$F0
-
-
 	STA V_PRIOR2,Y
 	INX 
 	INY 
@@ -483,6 +450,8 @@ _AIHLIST ;set up index list
 	BNE @CALCLP
 
 	JSR _AISORT
+	
+	JMP @POLLED
 	;skip polling WEEK < 3
 	LDA V_WEEK
 	CMP #$03
@@ -491,23 +460,15 @@ _AIHLIST ;set up index list
 	LDA V_OUTOFM
 	BNE @POLLED
 	;if poll count > 0, no further polls
-	LDA V_AIPOLC
+	LDA V_POLLCT
 	BNE @POLLED
 	LDY #00
 @POLLOOP 
 	LDA V_WEEK
 	CMP #$09
 	BNE @BLITZ
-	INC V_AIPOLC
+	INC V_POLLCT
 	LDX #01
-@BLOOP ;census every region
-	INC V_AIPOLL,X
-	INC V_AIPOLL,X
-	JSR _AICENS
-	INX 
-	CPX #$0A
-
-	BNE @BLOOP
 	JMP @DONEPOLL
 @BLITZ 
 	LDA V_PRIOR2,Y
@@ -521,22 +482,10 @@ _AIHLIST ;set up index list
 	LDA V_AIPOLL,X
 	BNE @OLDREG
 	INC V_AIPOLL,X
-	LDA V_WEEK
-	CMP #$05
-	BCC @NOCENS ;census cost
-	INC V_AIPOLL,X
-	JSR _AICENS
-	JMP @CENS
-@NOCENS ;poll cost
-	LDA V_FHCOST+1
-	SEC 
-	SBC #$02
-	STA V_FHCOST+1
-@CENS 
-	INC V_AIPOLC
+	JSR _AIPLCOST
 @OLDREG 
 	INY 
-	LDA V_AIPOLC
+	LDA V_POLLCT
 	CMP #$02
 	BNE @POLLOOP
 
@@ -544,6 +493,15 @@ _AIHLIST ;set up index list
 	JSR _AICLRP
 	JMP @CALC2
 @POLLED 
+	
+	;all states on by default
+	LDX #$00
+	LDA #$01
+@FILLOOP
+	STA V_PRIOR,X
+	INX
+	CPX #AISTATE
+	BNE @FILLOOP
 	RTS 
 
 ;calc_priority_list() 
@@ -553,9 +511,9 @@ _AIHLIST2 ;set up index list
 	JSR _CPOFFS
 	LDA #00
 	TAY
-	STA V_PRIOR2+29
+	STA V_PRIOR2+AISTATE
 	LDX #01
-	
+	;build VISIT state list
 @SLOOP
 	LDA V_EC,X
 	CMP #$0A
@@ -595,9 +553,9 @@ _AIHLIST2 ;set up index list
 	INX 
 	CPX #STATE_C
 	BNE @SLOOP
-	
+
 	STY FY1
-	
+	;build TV ADS list
 	+__LAB2O V_AIH2REG
 	LDX V_PARTY
 	LDY #$09
@@ -606,6 +564,10 @@ _AIHLIST2 ;set up index list
 	LDY #01
 @REGLOOP
 	TYA
+	;CMP #$03 ;NO TV ADS IN GR8LAKES/ATLANTIC!
+	;BEQ @NOTVADS
+	;CMP #$05
+	;BEQ @NOTVADS
 	ORA #$F0
 	LDX FY1
 	STA V_PRIOR2,X
@@ -613,15 +575,16 @@ _AIHLIST2 ;set up index list
 	LDA (OFFSET),Y
 	INY
 	STA V_PRIOR,X
-	
 	INC FY1
+@NOTVADS
 	INY
 	CPY #$0A
 	BNE @REGLOOP
 	
 	JSR _AISORT ;sort by STATE LEAN, then by EC
 	JSR _AICSORT
-	
+
+	;determine whether to do action or not
 	LDX #00
 @TOVISIT
 	STX FAI
@@ -629,20 +592,13 @@ _AIHLIST2 ;set up index list
 	BEQ @NEXTST
 	BMI @TVADS
 	STA FSTATE
-	TXA
-	TAY
-	LDA (OFFSET2),Y ;if state is forgotten, skip
-	BNE @FORGOT
-	JSR _AIHLIST23
-	JMP @VISDONE
-@FORGOT
-	LDA #$00
+	JSR _AIHLIST2V
 @VISDONE
 	LDX FAI
 	STA V_PRIOR,X
 	JMP @NEXTST
 @TVADS
-	JSR _AIHLIST22
+	JSR _AIHLIST2T
 	JMP @VISDONE
 @NEXTST
 	LDX FAI
@@ -651,8 +607,9 @@ _AIHLIST2 ;set up index list
 	BNE @TOVISIT
 	
 	RTS
+	
 ;calculate TV ADS to-visit (A = region code #$Fx)
-_AIHLIST22
+_AIHLIST2T
 	AND #$0F
 	TAX
 	STX FVAR1 ;region
@@ -667,9 +624,11 @@ _AIHLIST22
 @STLOOP
 	LDA FVAR5
 	STA FSTATE
-	JSR _AIHLIST23
+	JSR _AIHLIST2V
 	BEQ @FALSE
-	INC FVAR2
+	CLC 
+	ADC FVAR2
+	STA FVAR2
 @FALSE
 	INC FVAR5
 	LDA FVAR5
@@ -681,121 +640,287 @@ _AIHLIST22
 	LSR
 	CLC
 	ADC #$01
-	CMP FVAR2 ;floor(half) of states are to-visit 
+	CMP FVAR2 ;sum of states' priorities is greater than [half the state count + 1]
 	BCS @RETFAL
-	LDA #$01
+	LDX FVAR1
+	LDA D_REGC-1,X
+	CMP FVAR2
+	BCC @NORMAL ;sum of states' priorities is greater than or equal to [state count]
+	LDA #$03 ;priority 3
+	RTS
+@NORMAL
+	LDA #$01 ;priority 1
 	RTS
 @RETFAL
-	LDA #$00
+	LDA #$00 ;priority 0
+	RTS
+
+;ai_hard_2_poll()
+;works in tandem with _AISURVEY to complete a short blacklist of states in V_AISURV
+_AIPOLL2
+	LDA V_WEEK
+	CMP #$07
+	BCS @EARLY
+	RTS
+@EARLY
+	LDA C_MONEY
+	CMP #10
+	BCS @OUTOFM
+	RTS
+@OUTOFM
+	+__LAB2O V_AISURV
+	LDX V_PARTY
+	LDY #$03
+	JSR _OFFSET
+	LDY #$02
+@LOOP
+	LDA (OFFSET),Y
+	BMI @SKIP ;miss
+	BEQ @SKIP ;empty
+	;state found
+	JSR _STATEGR
+	JMP @FOUND
+@SKIP
+	DEY
+	CPY #$FF
+	BNE @LOOP
+	RTS
+@FOUND
+	STX V_AIPOLL
+	JSR _AIPLCOST
 	RTS
 
 ;calculate single-state to-visit
 ;LOCAL: FAI = priority index, FSTATE = priority state index
-_AIHLIST23
+_AIHLIST2V
+	LDA SAVEAI
+	CMP #AIPSYCH
+	BNE @PSYCH
+	LDX FSTATE
+	JSR _VISLOG
+	BCC @PSYCH
+	JMP @FALSE
+@PSYCH
+	
 	LDA FSTATE
 	JSR _STATEGR
-	LDA V_AIPOLL-1,X
-	CMP #$02
-	BEQ @CENSUS
+	CPX V_AIPOLL
+	BEQ @POLL
+@NOPOLL
+	LDX FSTATE
+	STX FARG1
+	JSR _CPOFFS
 	
-	JSR _MULTNP
+	+__LAB2O V_AISURV 
+	LDX V_PARTY
+	LDY #$03
+	JSR _OFFSET
+	LDY #00
+@BLACKLIST
+	LDA (OFFSET),Y
+	CMP FSTATE
+	BEQ @FALSE ;no survey/poll-blacklisted states
+	INY
+	CPY #$03
+	BNE @BLACKLIST
+	
+	JSR _MULTSWING ;is this state a "Swing" state for me?
 	TXA
-	CMP #$02
+	EOR #$01
+	STA FX1 ;hold NOT(return)
+	
+	LDA V_PARTY
+	CLC
+	ADC #UND_OFFS+1
+	TAY
+	LDA (CP_ADDR),Y
+	CMP #$05
+	BCC @NODELTA ;delta only works for LEAN >= 5 (this is arbitrary in RANDOM mode)
+	
+	LDX FSTATE
+	LDA V_CTRLD,X
+	BEQ @NODELTA
+	LDA V_CTRL,X
+	CMP V_PARTY
+	BEQ @NODELTA ;if control changed to AI, normal priority check
+	CMP #UND_PRTY 
+	BNE @OPPONENT
+	LDA #$02 ;priority 2
+	SEC
+	SBC FX1 ;priority 1 IF NOT swing state
+	RTS
+@OPPONENT
+	LDA #$03 ;priority 3
+	RTS
+@NODELTA
+	JSR _MULTNP ;if AI controls, priority 0
+	CPX #$02
 	BEQ @FALSE
 @TRUE
-	LDA #$01
+	LDA #$01 ;if opponent or UND controls, priority 1
+	CPX #$00
+	BEQ @SKIPSWNG
+	SEC
+	SBC FX1 ;priority 0 IF NOT swing state
+@SKIPSWNG
 	JMP @VISDONE
 @FALSE
-	LDA #$00
+	LDA #$00 ;priority 0
 @VISDONE
 	RTS
-@CENSUS
+@POLL
 	LDA FSTATE
 	STA FARG1
 	JSR _CPOFFS
-	JSR _MULTUCP
-	CPX #$01
-	BEQ @CONTIN
-	
-	JSR _MULTSAFE
-	BNE @FORGET
-	
-	LDA #$00
-	STA V_SUMFH
 	JSR _POPSUMR
-	JSR _TMARGIN2
+	JSR _TMARGIN2 ;% margin between current, highest
+	
+	+__LAB2O V_AISURV 
+	LDX V_PARTY
+	LDY #$03
+	JSR _OFFSET
+	LDY #$00
+@CHKSURV
+	LDA (OFFSET),Y
+	CMP FSTATE
+	BEQ @POLLED
+	INY
+	CPY #$03
+	BNE @CHKSURV
+	JMP @NOPOLL
+@POLLED
 	LDA #$00
 	STA FY1 ;reset zero-priority flag
 	JSR _MULTNUN
 	LDA FY1
-	BNE @FORGET
-	CPX #$01
-	BEQ @TRUE
-@FORGET
-	LDY FAI
-	LDA #$01
-	STA (OFFSET2),Y
-	JMP @FALSE
+	BNE @FALSE
+	CPX #$01 ;if margin >5%, do not do action and keep state in blacklist
+	BNE @FALSE
+	;else, remove from blacklist
+	LDY #$00
+@RMLOOP
+	LDA (OFFSET),Y
+	CMP FSTATE
+	BEQ @REMOVE
+	INY
+	CPY #$03
+	BNE @RMLOOP
+@REMOVE
+	LDA #$FF
+	STA (OFFSET),Y
+	JMP @TRUE
+;@FORGET
+	;LDY FAI
+	;LDA #$01
+	;STA (OFFSET2),Y
+	;JMP @FALSE
 @CONTIN
 	JSR _MULTNP
 	CPX #$02
 	BEQ @FALSE
 	JMP @TRUE
 	
-;ai_hard_2_census()
-;determine census regions (2 max)
-_AICENS2
+;ai_survey()
+_AISURVEY
 	LDA V_WEEK
+	CMP #$05
+	BCC @QUIT
+	
+	LDX V_PARTY
+	LDA V_SURVEY,X
 	CMP #$03
-	BCC @SKIP
-	
-	LDA C_MONEY
-	CMP #20
-	BCC @SKIP
-	
-	LDX #00
-	STX V_AIPOLC
-	STX FAI
-@PRIORLP
+	BNE @REMAING
+@QUIT
+	RTS
+@REMAING
+	;check prioritized states that are UNSURE
+	LDA #$01
+	STA FAI
+@UNDLOOP
 	LDX FAI
-	LDY FAI
-	LDA V_PRIOR,X ;if NOT state to-visit, skip
-	BEQ @NEXT
-	LDA (OFFSET2),Y ;if state forgotten, skip
-	BNE @NEXT
-	
 	LDA V_PRIOR2,X
-	BMI @TVADS
-	JSR _STATEGR
-	JMP @GOTREG
-@TVADS
-	AND #$0F
+	BMI @SKIPTV
 	TAX
-@GOTREG
-	LDA V_AIPOLL-1,X ;no copies
-	BNE @NEXT
+	LDA V_CTRL,X
+	CMP #UND_PRTY
+	BEQ @VALID
 	
-	LDA V_AIPOLC ;2 censuses max
-	CMP #$02
-	BCS @SKIP
-	
-	LDA #$02
-	STA V_AIPOLL-1,X
-	JSR _AICENS
-	INC V_AIPOLC
-@NEXT
+@SKIPTV
 	INC FAI
 	LDA FAI
 	CMP #AISTATE
-	BNE @PRIORLP
-@SKIP
+	BNE @UNDLOOP
+	;check list of surveyed states; do not repeat a state
 	RTS
+@VALID
+	STX FSTATE
+	+__LAB2O V_AISURV
+	LDY #$03
+	LDX V_PARTY
+	JSR _OFFSET
+	+__O2O2
+	LDY #$00
+@NOREPEATS
+	LDA (OFFSET),Y
+	BEQ @OK
+	CMP #$FF
+	BEQ @SKIP
+	CMP FSTATE
+	BNE @OK
+	BEQ @REPEAT
+	JMP @OK
+@SKIP
+	INY
+	CPY #$03
+	BNE @NOREPEATS
+@REPEAT
+	JMP @SKIPTV
+@OK
+	LDA V_FHCOST+1
+	SEC
+	SBC #SURVEY_COST
+	STA V_FHCOST+1
 	
-;ai_census_cost(X = region)
-_AICENS 
+	;check UND CP, if < 3 add to list, otherwise add #$FF
+	LDA FSTATE
+	STA FARG1
+	JSR _CPOFFS
+	+__O2O
+	LDY #UND_OFFS
+	LDX V_PARTY
+	LDA V_SURVEY,X
+	PHA
+	LDA (CP_ADDR),Y
+	CMP #04
+	BCC @REMOVE
+	PLA
+	TAY
+	LDA #$FF
+	STA (OFFSET),Y
+	JMP @DONE
+@REMOVE
+	PLA
+	TAY
+	LDA FSTATE
+	STA (OFFSET),Y
+	PHA
+	TYA
+	CLC
+	ADC #12
+	TAY
+	PLA
+	STA (OFFSET),Y
+@DONE
+	LDX V_PARTY
+	INC V_SURVEY,X
+	RTS
+
+;ai_poll_cost()
+_AIPLCOST
 	LDA V_FHCOST+1
 	SEC 
-	SBC D_CENSUS-1,X
+	SBC #06
+	SBC V_POLLCT
 	STA V_FHCOST+1
 	RTS 
 
@@ -808,9 +933,6 @@ _AIHONE
 	STA FARG1
 	JSR _CPOFFS
 	JSR _POPSUMR
-	JSR _TMARGIN2 ;% margin between current, highest
-	LDA FRET1
-	STA FAICTRL
 
 	LDA #00
 	STA FAIMUL ;start with 1x multiplier
@@ -835,12 +957,8 @@ _AIHONE
 @INDFILT 
 	LDA FSTATE
 	JSR _STATEGR
-	LDA V_AIPOLL,X
-	CMP #$01
-	BEQ @POLL
-	CMP #$02
-	BEQ @CENSUS
-
+	;LDA V_AIPOLL,X
+	;BNE @POLL
 ;JSR _MULTAS
 	JSR _MULTNP
 
@@ -912,20 +1030,12 @@ _AIHONE
 	LDA FVAR1
 	RTS 
 ;sub-branches 
-@POLL 
-	JSR _MULTPOL
-	JMP @CALC
-@CENSUS 
-	LDY #UND_OFFS
-	LDA (CP_ADDR),Y
-
-	BEQ @NOUND
-	JSR _MULTPOL
-	JSR _MULTUCP
-	JMP @CALC
-@NOUND 
-	JSR _MULTNUN
-	JMP @CALC
+;@POLL 
+;	JSR _MULTPOL
+;	JMP @CALC
+;@NOUND 
+;	JSR _MULTNUN
+;	JMP @CALC
 
 ;calc_priority_group(A = REGION)
 ;..for group of states
@@ -978,7 +1088,7 @@ _AIHMANY
 @COUNT 
 
 	JSR _162FAC ;16bit to float FAC
-	JSR _FDIVT ;FAC = ARG / FAC
+	JSR _DIVIDE ;FAC = ARG / FAC
 	LDA #00 ;no negatives!
 	STA $A2
 	STA $AA
@@ -997,15 +1107,15 @@ _AIHMANY
 ;sorts the priority list and its INDEX list 
 
 ;hard 2 AI call
-_AISORT2 
-	LDA #STATE_C
-	STA FVAR3 ;length
-	JMP _AISORT3
+;_AISORT2 
+;	LDA #STATE_C
+;	STA FVAR3 ;length
+;	JMP _AISORT3
 ;hard 1 AI call
 _AISORT 
-	LDA #$1D
+	LDA #AISTATE
 	STA FVAR3 ;length
-_AISORT3 
+;_AISORT3 
 	LDA #00
 	STA FVAR2 ;done
 
@@ -1107,33 +1217,23 @@ _AICSORT
 @RTS
 	RTS
 
-;get_und_multiplier() 
-_MULTUCP 
-	LDX #00
-	LDY #UND_OFFS
-	LDA (CP_ADDR),Y
-	STA FVAR1
+;get_vislog_limit(X = state index)
+;returns compare to either 6 VISITS or 12 VISITS
+_VISLOG
+	LDA S_PLAYER
+	CMP #$04
+	BEQ @4PLAYER
 	
-	;LDA V_WEEK
-	;CMP #$09
-	;BEQ @LASTWEEK
+	LDA V_VISLOG,X
+	CMP #06 ;a state may be visited no more than 6 times in total
+	RTS
+@4PLAYER
+	LDA V_VISLOG,X
+	CMP #12
+	RTS
 
-	LDA FVAR1
-	CMP #$08 ;<8 UND CP
-	BCS @C0
-	BCC @DONE
-@C0 
-	INX
-	BNE @DONE
-@DONE 
-	LDA D_AI_UCP,X
-	CLC 
-	ADC FAIMUL
-	STA FAIMUL
-
-	RTS 
-
-;get_nopoll_multiplier() 
+;get_nopoll_multiplier()
+;returns X = [opponent controls = 0, UND CTRL = 1, ai controls = 2] 
 _MULTNP
 	JSR _GETCTRL ;get control value (as on map)
 	BEQ @MINE
@@ -1154,62 +1254,6 @@ _MULTNP
 	ADC FAIMUL
 	STA FAIMUL
 	RTS 
-
-;poll_multiplier() 
-_MULTPOL 
-	LDA V_FPOINT
-	AND #$0F
-	STA FVAR1
-	BNE @CLOSE
-
-	LDA V_FPOINT+1
-	AND #$0F
-	CMP #$06
-	BCS @CLOSE
-	LDX #04 ;<5% for any party
-	BNE @DONE
-@CLOSE 
-	LDA FAICTRL ;get control value of margin
-	BNE @CONTROL
-	;opponent controls state
-	LDX #03
-	LDA FVAR1
-	BEQ @DONE ;<10%
-	DEX ;<30%
-	CMP #$03
-	BCS @C2
-	BNE @DONE
-@C2 
-	DEX ;<50%
-	CMP #$05
-	BCS @C1
-	BNE @DONE
-@C1 
-	DEX 
-	BEQ @DONE ;>50%
-@CONTROL ;AI controls state
-	LDX #05
-	LDA FVAR1
-	BEQ @DONE ;<10%
-	INX ;<30%
-	CMP #$03
-	BCS @C6
-	BNE @DONE
-@C6 
-	INX ;<50%
-	CMP #$05
-	BCS @C7
-	BNE @DONE
-@C7 
-	INX 
-	BNE @DONE ;>50%
-@DONE 
-	LDA D_AI_POL,X
-	CLC 
-	ADC FAIMUL
-	STA FAIMUL
-
-	RTS
 
 ;get_nound_multiplier() 
 _MULTNUN 
@@ -1237,35 +1281,52 @@ _MULTNUN
 	STA FY1
 	RTS
 
-;get_assumed_multiplier() 
-_MULTAS 
-	LDA V_WEEK
-	CMP #$04
-	BCS @TWO
-	RTS ;no change
-@TWO CMP #$07
-	BCS @THREE
-
-	LDX FSTATE
-	LDA V_EC,X
-	CMP #$1C
-	BCC @RTS
-	DEC FAIMUL ;halve
-	RTS 
-@THREE 
-	LDX FSTATE
-	LDA V_EC,X
-	CMP #$1C
-	BCS @LARGER
-	CMP #$0A
-	BCS @SMALLER
-	BCC @RTS
-@LARGER 
-	DEC FAIMUL ;quarter
-@SMALLER 
-	DEC FAIMUL
-@RTS 
-	RTS 
+;multiplier_swing_state(FSTATE = state index, CP_ADDR set)
+;times 2 for a "swing" state, which is if the state's [max STATE LEAN - current party's STATE LEAN] is <= 2 (e.g. 6/4 or 8/2/2/8 would be swing states for D/S) 
+_MULTSWING
+	JSR _MAXR
+	
+	LDX #00
+	LDY #UND_OF1M
+@LOOP
+	LDA (CP_ADDR),Y
+	STA V_MAX,X
+	INY
+	INX
+	INX
+	TXA
+	LSR
+	CMP S_PLAYER
+	BNE @LOOP
+	
+	JSR _MAX2
+	LDA #$00
+	TAX
+	TAY
+@LOOP2
+	CPY V_PARTY
+	BEQ @INC ;skip check of own party's STATE LEAN
+	LDA MAXLOW
+	SEC
+	SBC V_MAX,X
+	CMP #$03
+	BCC @SWING
+@INC
+	INX
+	INX
+	INY
+	CPY S_PLAYER
+	BNE @LOOP2
+	LDX #00
+	JMP @RESULT
+@SWING
+	LDX #01
+@RESULT
+	TXA
+	CLC
+	ADC FAIMUL
+	STA FAIMUL
+	RTS
 
 ;group_state_list(A=region) 
 ;gets all states in region with EC < 10
@@ -1323,7 +1384,7 @@ _AVGVAL
 	LDY FARG1 ;count
 
 	JSR _162FAC ;16bit to float FAC
-	JSR _FDIVT ;FAC = ARG / FAC
+	JSR _DIVIDE ;FAC = ARG / FAC
 	LDA #00 ;no negatives!
 	STA $A2
 	STA $AA
@@ -1348,13 +1409,20 @@ _AIH2EC
 	RTS
 	
 ;ai_clear_polls()
-;clears all polled regions
+;clears all polled regions, resets weekly survey flags
 _AICLRPL
 	LDA #$00
+	STA V_AIPOLL
 	LDX #$00
-@CLRLOOP
-	STA V_AIPOLL,X
+@CLR2
+	STA V_SURVWK,X
 	INX
-	CPX #$0A
-	BNE @CLRLOOP
+	CPX S_PLAYER
+	BNE @CLR2
+	RTS
+	
+;ai_set_region(A = region)
+_AISETREG
+	JSR _STATEGR
+	STX C_CREG
 	RTS

@@ -2,9 +2,8 @@
 ;CAMP01 
 ;schedule routines
 
-;clear_schedule() 
-;draws an empty schedule, clears space
-_CLRSCHD 
+;clear_schedule_bottom_right()
+_CLRBR 
 	LDA #$1D
 	STA GX_LX1
 	LDA #P_RIGHT
@@ -68,13 +67,18 @@ _SCHADD
 
 	LDA FVAR1
 	JSR _SCHPC
-	JSR _SCHWARN
+	;JSR _SCHWARN
 
 ;PROCEED DIRECTLY TO _SCHDRW
 
 ;draw_to_schedule(A=action,FARG1=visited state)
 ;draws the provided action to schedule
-_SCHDRW 
+_SCHDRW
+	LDA S_SKIPGAME
+	BEQ @SKIPGAME
+	RTS
+@SKIPGAME
+
 	LDA C_SCHEDC
 	CLC 
 	ADC #P_SCH2R
@@ -82,15 +86,15 @@ _SCHDRW
 	LDA #P_SCH2C
 	STA GX_CCOL
 	;set blank count
-	LDA V_WARN
-	BEQ @WARN
-	LDA V_TVWARN
-	BEQ @WARN
-	LDA #$09
-	BNE @NOWARN
-@WARN 
-	LDA #$08
-@NOWARN 
+	;LDA V_WARN
+	;BEQ @WARN
+	;LDA V_TVWARN
+	;BEQ @WARN
+	LDA #09
+	;BNE @NOWARN
+;@WARN 
+	;LDA #08
+;@NOWARN 
 	STA T_BLANKX+4
 
 	+__LAB2XY T_BLANKX
@@ -99,6 +103,7 @@ _SCHDRW
 	STA GX_CCOL
 	LDX FVAR1
 	JSR _SCHDRW2
+	JSR _SCHWARN
 	RTS
 ;text draw (x = selected action)
 _SCHDRW2
@@ -109,9 +114,7 @@ _SCHDRW2
 	STA GX_DCOL
 
 	LDA FARG1
-	JSR _DRWPOST
-	INC GX_CCOL
-	INC GX_CCOL
+	JSR _DRWPOST2
 	LDX FARG1
 	JSR _DRWSTEC
 
@@ -143,12 +146,14 @@ _SCHDRW2
 ;schedule_warning() 
 ;draws a warning if one was issued during precalc
 _SCHWARN 
+	LDA S_SKIPGAME
+	BNE @RTS
 	LDA V_OUTOFM
 	BNE @RTS
 
-	LDX V_PARTY ;skip if AI
-	LDA V_AI,X
-	BNE @RTS
+	;LDX V_PARTY ;skip if AI
+	;LDA V_AI,X
+	;BNE @RTS
 
 	LDA C_SCHEDC
 	CLC 
@@ -167,7 +172,7 @@ _SCHWARN
 @TVWARN 
 	LDA V_TVWARN
 	BEQ @RTS
-	LDA #$25
+	LDA #VK_PERC
 	STA GX_CIND
 @DRAW 
 	JSR _GX_CHAR
@@ -213,7 +218,8 @@ _SCHCLR
 	BNE @SLOOP
 	;clear fund/health precalc
 	LDX #00
-@PLOOP STA V_FHCOST,X
+@PLOOP 
+	STA V_FHCOST,X
 	INX 
 	CPX #$4F
 	BNE @PLOOP
@@ -235,8 +241,6 @@ _SCHEXE
 	STA C_SCHEDC
 	STA V_CPGPTR
 @LOOP 
-
-
 	LDX C_SCHEDC
 	LDA C_SCHED,X
 	BEQ @INC ;rest
@@ -245,6 +249,8 @@ _SCHEXE
 	CMP #$F0
 	BCS @TVADS
 	AND #$7F ;visit
+	TAX
+	INC V_VISLOG,X
 	JSR _SCHEXE2
 	JMP @INC
 @TVADS 
@@ -290,6 +296,7 @@ _CALCFND
 	LDA C_FUND
 	ASL ;fund ; 2
 	STA FRET3 ;running total is COST, so positive
+	JSR _EFUNDS2
 	JSR _STPCHF
 	RTS 
 
@@ -310,8 +317,9 @@ _CALCZZ
 	CMP #$80
 	BCC @CAP
 	LDA #$7F
-@CAP 
+@CAP
 	STA FRET2
+	JSR _EHEALTH2
 
 	LDA #00
 	STA FRET1
@@ -338,6 +346,18 @@ _CALCVIS
 	BNE @NOMONEY
 	JMP @WARNING ;if money is zero, action wasted
 @NOMONEY 
+	LDY FARG1 ;if pandemic event, action wasted
+	LDA #EV_PANDEMIC
+	JSR _EVENTON
+	BNE @DOUBLE
+	LDA #$00
+	STA FRET1
+	STA FRET2
+	STA FRET3
+	JMP @WARNING
+@DOUBLE
+	
+	
 	LDA V_VBONUS
 	AND #$7F
 	CMP FARG1
@@ -395,7 +415,24 @@ _CALCVIS
 	LSR 
 	JSR _CPADD ;health / 32
 	JSR _CISSUEB ;issue bonus
-@COST 
+@COST
+	;event handling
+	LDY FARG1
+	LDA #EV_FAIR
+	JSR _EVENTON
+	BNE @PLUS4
+	LDA FRET1
+	CLC
+	ADC #$04
+	STA FRET1
+@PLUS4
+	LDY FARG1
+	LDA #EV_WEATHER
+	JSR _EVENTON
+	BNE @HALVE
+	LSR FRET1
+@HALVE
+
 	LDA FRET1
 	JSR _STPCCP
 	PHA 
@@ -410,7 +447,6 @@ _CALCVIS
 	LSR 
 	CLC 
 	ADC FRET3
-
 
 	ADC V_TRAVEL ;travel cost
 	STA FRET3
@@ -463,13 +499,23 @@ _CALCTV
 	JMP @WARN
 @HEALTH 
 
+	LDA FARG1 ;if power down event, action wasted
+	AND #$0F
+	TAY
+	LDA D_REGLIM-1,Y
+	TAY
+	LDA #EV_POWER
+	JSR _EVENTON
+	BNE @POWEROUT
+	JMP @WARN
+@POWEROUT
+
 	LDX FARG1
 	DEX 
 	LDA D_REGLIM,X
 	STA FSTATE
 	JSR _CPOFFS
 	LDA D_REGLIM+1,X
-
 
 	STA FVAR3
 @LOOP 
@@ -481,11 +527,22 @@ _CALCTV
 	JSR _CISSUEB
 
 	LDA C_TV
+	ASL
 	JSR _CPADD
 	LDA C_CER
 	JSR _CPADD
 	LSR FRET1
-
+	;event handling
+	LDY FSTATE
+	LDA #EV_TVADS
+	JSR _EVENTON
+	BNE @PLUS4
+	LDA FRET1
+	CLC
+	ADC #$04
+	STA FRET1
+@PLUS4
+	
 	LDA FVAR2
 	CLC 
 	ADC FRET1
@@ -505,7 +562,6 @@ _CALCTV
 	STA FRET2
 	LSR 
 	CLC 
-	ADC C_TV
 	ADC C_TV
 	STA FRET3
 @COST 
@@ -721,11 +777,7 @@ _ACTLOG
 	INC GX_CROW
 	;logs
 @WEEK
-	+__LAB2O V_SCHIST
-	LDX V_WEEK
-	DEX
-	LDY #28
-	JSR _OFFSET
+	JSR _ACTLOG3
 	
 	LDA #$00
 	STA V_PARTY
@@ -794,29 +846,35 @@ _ACTLOG
 
 ;action_to_action_selection (A = action)
 _ACTLOG2
+	CMP #ACTIONREST
 	BEQ @REST
-	CMP #$FF
+	CMP #ACTIONFUND
 	BEQ @FUNDRAIS
 	BMI @TVADS
-	LDX #$00
+	LDX #ACT_VISIT
 	STA FARG1
 	JMP @DONE
 @TVADS
-	LDX #$01
+	LDX #ACT_TVADS
 	AND #$0F
 	STA C_CREG
 	ORA #$F0
 	JMP @DONE
 @REST
-	LDX #$03
+	LDX #ACT_REST
 	JMP @DONE
 @FUNDRAIS
-	LDX #$02
+	LDX #ACT_FUNDR
 @DONE
 	STX FVAR1
 	RTS
-	
-	
-
+;action_log_offset()
+_ACTLOG3
+	+__LAB2O V_SCHIST
+	LDX V_WEEK
+	DEX
+	LDY #PLAYERMAX*ACTIONMAX
+	JSR _OFFSET	
+	RTS
 
 

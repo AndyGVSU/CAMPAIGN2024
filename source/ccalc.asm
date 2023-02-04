@@ -53,25 +53,30 @@ _DETAIL
 	STA GX_CCOL
 	;draw row
 	LDA #01
-	STA S_DRWUND
+	STA S_SUMUND
 	JSR _POPSUMR
 	JSR _STATSUM
 
 	LDA V_WEEK
-
-
 	CMP #$0A
 	BEQ @FINALW
+	CMP #$0B
+	BEQ @TOTAL
+	
 	ORA #$30
 	BNE @NOTFIN
 @FINALW 
-	LDA #$46 ;F
+	LDA #$4C ;L
+	BNE @NOTFIN
+@TOTAL
+	INC GX_CROW
+	JMP @FIN
 @NOTFIN 
 	STA GX_CIND
 	LDA #C_WHITE
 	STA GX_DCOL
 	JSR _GX_CHAR
-
+@FIN
 	LDY #00
 	STY FVAR1
 
@@ -101,7 +106,7 @@ _DETAIL
 	INC GX_CCOL
 	;recalc total without UND
 	LDA #00
-	STA S_DRWUND
+	STA S_SUMUND
 	JSR _POPSUMR
 	JSR _STATSUM
 	JSR _SFVAR
@@ -118,7 +123,6 @@ _DETAIL
 	STA GX_CIND
 	JSR _GX_CHAR
 
-
 	INC GX_CCOL
 	+__LAB2XY V_FPOINT
 	JSR _GX_STR
@@ -131,7 +135,7 @@ _DETAIL
 	JSR _GXINCRW
 	INC V_WEEK
 	LDA V_WEEK
-	CMP #$0B
+	CMP #$0C
 	BEQ @SKIPLOOP
 	JMP @WEEKLOOP
 @SKIPLOOP 
@@ -265,9 +269,10 @@ _PRECAMP
 ;postgame_campaign() 
 ;national campaign for end of game
 _PSTCAMP 
-	LDA C_CER
+	LDA C_LMIN
+	ASL
 	CLC 
-	ADC C_LMIN ;base = CER + LMIN
+	ADC C_CER ;base = CER + LMIN * 2
 	STA FARG2
 	LDA C_CREG
 	STA FARG1
@@ -282,44 +287,31 @@ _PSTCAMP
 ;add_cp_from_undecided(FRET1 = CP GAIN)
 ;takes CP from UND and adds to current; if UND out, /4
 ;CP_ADDR = current state
-_ADDCPU 
-	LDA S_PLAYER
-	CMP #$04
-	BNE @HALVE
-	LSR FRET1 ;1/2 CP in 4 player game
-@HALVE
+;LOCAL: FVAR6
+_ADDCPU
+	LDA #$00
+	STA FVAR6 ;do _ADDCPU2
+
 	LDY V_LSTATE
 	LDA #00
 	STA V_REVERT,Y
-	;add to total CP gains
-	LDA V_PARTY
-	ASL 
-	TAX 
-	LDA V_ALLCP,X
-	CLC 
-	ADC FRET1
-	STA V_ALLCP,X
-	BCC @CARRY
-	INC V_ALLCP+1,X
-
-
-@CARRY 
-	LDX #$0A
-	LDA V_ALLCP,X
-	CLC 
-	ADC FRET1
-	STA V_ALLCP,X
-	BCC @CARRY2
-	INC V_ALLCP+1,X
-@CARRY2 
-_ADDCPUN ;NO REVERT
-;LDY #UND_OFFS
-;LDA (CP_ADDR),Y
-	LDY V_LSTATE
+	JMP _ADDCPUN2
+;add_cp_from_undecided_no_revert
+;call for REVERT LEAN
+_ADDCPUN
+	LDA #$01
+	STA FVAR6
+_ADDCPUN2
+	LDA S_PLAYER
+	CMP #$04
+	BNE @HALVE
+	LSR FRET1 ;1/2 CP IN 4 PLAYER GAME
+@HALVE
+	LDY V_LSTATE ;current cp_addr state
 	LDA V_UNDCP,Y
 	CMP FRET1
 	BCC @LESSUND
-
+	;if more or equal UND CP than CP gain:
 	LDY #UND_OFFS
 	LDA (CP_ADDR),Y
 	SEC 
@@ -340,6 +332,7 @@ _ADDCPUN ;NO REVERT
 	TAX 
 	JSR _ADDCPU2
 	RTS 
+	;if less UND than CP gain:
 @LESSUND 
 	TAX 
 	LDY V_PARTY
@@ -347,7 +340,11 @@ _ADDCPUN ;NO REVERT
 	CLV 
 	CLC 
 	ADC (CP_ADDR),Y
-	JSR _ADDCPU2
+	BCC @OVER2
+	LDA #$FF
+@OVER2	
+	STA (CP_ADDR),Y ;add all of UND to the gaining party
+	JSR _ADDCPU2 ;add 1/4 of the same amount to all other parties
 	
 	LDA S_CLASSC
 	BNE @NO4
@@ -355,7 +352,7 @@ _ADDCPUN ;NO REVERT
 	LDA FRET1
 	LDY #UND_OFFS
 	SEC 
-	SBC (CP_ADDR),Y
+	SBC (CP_ADDR),Y ;take the remainder (gain - UND)/4 and add to the gaining party (not opponents!)
 	LSR 
 	LSR 
 	LDY V_PARTY
@@ -376,8 +373,10 @@ _ADDCPU1
 @NOVERF 
 	STA (CP_ADDR),Y
 	RTS 
-;add cp /4 to other candidates
+;add CP/4 to other candidates
 _ADDCPU2 
+	LDA FVAR6
+	BNE @DONE
 	INY 
 	CPY #$05
 	BNE @WRAP
@@ -387,6 +386,7 @@ _ADDCPU2
 	CPY V_PARTY
 	BNE @RTS
 	DEC V_PARTY
+@DONE
 	RTS 
 @RTS 
 	DEC V_PARTY
@@ -405,7 +405,9 @@ _ADDCPU2
 ;IS_ADDR set beforehand
 ;adds issue bonus for current candidate to FRET1
 _CISSUEB 
-	LDY #$05
+	LDA #$00
+	STA V_IBONUS
+	LDY #ISSUEC
 @TOP 
 	DEY 
 	BPL @LOOP
@@ -421,20 +423,32 @@ _CISSUEB
 	LDA V_PARTY ;only for 3rd player
 	CMP #$02
 	BNE @RTS
-	LDA FRET1
-
-	CLC 
-	ADC #$02
-	STA FRET1
+	
 	;ISSUE BONUS + 2 FOR IND
-@RTS 
+	LDA #$02
+	CLC
+	ADC V_IBONUS
+	STA V_IBONUS
+	
+@RTS
+	LDY FARG1
+	LDA #EV_ISSUE
+	JSR _EVENTON
+	BNE @DOUBLE
+	ASL V_IBONUS
+@DOUBLE
+	LDA V_IBONUS
+	JSR _CPADD
+	
 	RTS 
 @LOOP 
 	LDA C_ISSUES,Y
 	CMP (IS_ADDR),Y
 	BNE @PLUS3
 	LDA #$03
-	JSR _CPADD
+	CLC
+	ADC V_IBONUS
+	STA V_IBONUS
 	BNE @TOP
 @PLUS3 
 	TAX 
@@ -443,8 +457,7 @@ _CISSUEB
 	CMP (IS_ADDR),Y
 	BNE @OFFBY1L
 @ADD1 
-	LDA #$01
-	JSR _CPADD
+	INC V_IBONUS
 	BNE @TOP
 @OFFBY1L 
 	INX 
@@ -500,11 +513,13 @@ _NEGATIV
 	RTS 
 
 ;draw_poll(X=REGION) 
-;LOCAL: FSTATE, FVAR3, FX1
+;LOCAL: FSTATE, FVAR3, FARG5
 _DRWPOLL 
-	STX FX1
+	STX FARG5
 	JSR _CLRBL
+	INC V_WEEK
 	JSR _OFFSHIS
+	DEC V_WEEK
 
 	LDA #P_POLLR
 	STA GX_CROW
@@ -519,7 +534,7 @@ _DRWPOLL
 	STA GX_CCOL
 	LDX FVAR3
 	JSR _DRWPN1
-	LDA #$25
+	LDA #VK_PERC
 	STA GX_CIND
 	JSR _GX_CHAR
 	INC FVAR3
@@ -542,7 +557,7 @@ _DRWPOLL
 
 @PNDONE 
 ;JSR _GXINCRW
-	LDX FX1
+	LDX FARG5
 	LDA D_REGLIM,X
 	STA FVAR3
 	DEX 
@@ -550,7 +565,12 @@ _DRWPOLL
 	STA FSTATE
 	STA FARG1
 	JSR _CPOFFS
-
+	
+	LDX FARG5
+	INC V_POLL-1,X
+	LDA V_POLL-1,X
+	STA V_POLDIV
+	
 	LDA #P_POLLC2
 	STA GX_LX1
 @LOOP 
@@ -558,17 +578,30 @@ _DRWPOLL
 	STA GX_CROW
 	LDA GX_LX1
 	STA GX_CCOL
-	LDA #C_WHITE
+	
+	LDX FSTATE
+	LDA V_STCOL,X
 	STA GX_DCOL
 	LDA FSTATE
 	JSR _DRWPOST
 	JSR _GXINCRW
 	LDA GX_LX1
 	STA GX_CCOL
-
+	
+	LDY FSTATE
+	LDA #EV_COMMS
+	JSR _EVENTON
+	BEQ @PLDONE
+	
 	JSR _POPSUMR
-	JSR _STATSUM
-
+	JSR _STATSUM ;get this start-of-week CP, not last week's
+	
+	LDX FSTATE
+	LDA V_CTRL,X
+	CMP #UND_PRTY
+	BNE @NOMOE
+	JSR _POLLOBF
+@NOMOE
 	LDA #00
 	STA FVAR1 ;party count
 @PLAYLOOP 
@@ -582,7 +615,7 @@ _DRWPOLL
 	STA GX_DCOL
 
 	LDA #00
-	STA V_FPOINT+2 ;remove % for C64
+	STA V_FPOINT+2
 	+__LAB2XY V_FPOINT
 	JSR _GX_STR
 	JSR _GXINCRW
@@ -616,7 +649,8 @@ _DRWPOLL
 	INC FSTATE
 	LDA FSTATE
 	CMP FVAR3
-	BNE @LOOP
+	BEQ @DONE
+	JMP @LOOP
 @DONE 
 	JSR _FTC
 	JSR _CLRBL
@@ -658,7 +692,7 @@ _SAVEHIS
 	RTS 
 
 ;tiebreaker() 
-;determines who wins control for a CP tie: 1: ISSUE BONUS -> 2: STATE LEAN -> 3: POPULAR VOTE
+;determines who wins control for a CP tie: 1: ISSUE BONUS -> 2: STATE LEAN -> 3: WON POPULAR VOTE -> 4: COIN FLIP
 ;POPSUM, CP_ADDR, IS_ADDR set beforehand
 ;returns A = party index, FRET2 = tie value
 ;LOCAL: FVAR1-2,FRET1+3,FX1
@@ -720,44 +754,22 @@ _TIE
 	BEQ @GOTOT3
 	JMP _TIE2
 @GOTOT3 
-
-	LDA #01
-	STA FX1 ;temp use for pop offset
-@TIE3L 
+	LDA #$03
+	STA FRET3
+	
 	LDA #00
 	STA FVAR1
-@TIE3 
+@TIE3
 	LDX FVAR1
 	LDA V_MAXPL,X
-	ASL 
-	CLC 
-	ADC FX1
-	TAX 
-	LDA V_POPSUM,X
-	STA FVAR6 ;temp value
-	LDA FVAR1
-	ASL 
-	TAX
-	LDA FVAR6
-	STA V_MAX,X
-
+	CMP V_POPWIN
+	BEQ @MATCH
 	INC FVAR1
 	LDA FVAR1
 	CMP FVAR2
-	BNE @TIE3
-
-	JSR _MAX2
-	PHA 
-	BNE @TIE3DON
-	PLA 
-	DEC FX1
-	LDA FX1
-	BEQ @TIE3L ;if FX1 is not zero (#$FF)
-@TIE3DON 
-	LDA #$03
-	STA FRET3
-	PLA 
+	BNE @TIE1
 	BEQ @GOTOT4
+@MATCH
 	JMP _TIE2
 @GOTOT4 
 
@@ -771,14 +783,12 @@ _TIE
 ;return SR
 _TIE2 
 	TAX 
-	DEX 
-
-
+	DEX
 	LDA V_MAXPL,X
 	RTS 
 
 ;calc_win() 
-;determines who won and by what tie level
+;determines who won and by what tie level: 1->EC PLURALITY; 2->WON POPULAR VOTE; 3->LMIN; 4->COIN FLIP
 ;FRET1 = winning party index + 1
 ;RETURNS A = winning criteria
 _CALCWIN 
@@ -787,17 +797,7 @@ _CALCWIN
 
 	LDA #STATE_C
 	STA FARG5
-	JSR _SUMEC
-
-	JSR _MAXR
-	LDX #00
-@LOOP1 
-	LDA V_SUMEC,X
-	STA V_MAX,X
-	INX 
-	CPX #$08
-	BNE @LOOP1
-	JSR _MAX2
+	JSR _MAXEC
 	BEQ @TIE1
 	STA FRET1
 	LDA #00
@@ -807,20 +807,16 @@ _CALCWIN
 	STX FAI ;temp store tied party count
 	JSR _MAXR
 
-; LDA #00
-; STA S_DRWUND
-; JSR _POPSUM1
-
 	LDX #00
-@LOOP2 
-	LDA V_ALLCP,X
-	STA V_MAX,X
-	INX 
-	CPX #$08
+@LOOP2
+	LDA V_MAXPL,X
+	CMP V_POPWIN
+	BEQ @MOSTPOP
+	INX
+	CPX FAI
 	BNE @LOOP2
-	JSR _CALCWIN2
-	JSR _MAX2
-	BEQ @TIE2
+	
+@MOSTPOP
 	STA FRET1
 	LDA #01
 	RTS 
@@ -831,8 +827,6 @@ _CALCWIN
 	STA V_PARTY
 @LOOP3 
 	LDA V_PARTY
-
-
 	ASL 
 	TAX 
 	LDA C_LMIN
@@ -896,7 +890,7 @@ _CALCWIN2
 	RTS 
 
 ;calculate_revert_lean() 
-;adds CP to unvisited states (scales cumulatively)
+;adds CP to unvisited states
 _CALCREV 
 	LDX #01
 	STX FSTATE
@@ -1025,4 +1019,614 @@ _REGLEAN
 	LDA FVAR1
 	CMP #$0A
 	BNE @REGLOOP
+	RTS
+
+;we already have state control values, so we know which states are outside MoE. Those numbers remain unaltered. Those that AREN'T must have their state sums modified, but not in excess of the MoE. Since we know that the difference between the top two parties is always less than MoE, Therefore, it makes sense to 1) decrease the largest party's count by [0,-MoE/2 + 1] to a minimum of 1, 2) increase all other parties by [0,MoE/2 - 1] to a maximum of 255, where MoE is (total CP * MoE).
+;poll_obfuscate()
+_POLLOBF
+	;do MoE / 100
+	LDA #$00
+	LDY V_MOE
+	JSR _162FAC
+	JSR _FDIV10
+	JSR _FDIV10
+	JSR _FAC2ARG
+	;multiply MoE by STATSUM total
+	LDA #$00
+	LDY V_POPSUM+10
+	JSR _162FAC
+	JSR _FMULTT
+	;convert back to hex
+	LDA #00 ;no negatives!
+	STA $A2
+	STA $AA
+	JSR _FAC232 ;float FAC to 32bit
+	;generate [party] random amounts
+	LDX S_PLAYER
+@RANDOM
+	DEX
+	LDA FAC+4
+	LSR
+	;halve MoE [# of times region has been POLLed - 1]
+	LDY V_POLDIV
+	DEY
+@HALVING
+	CPY #00
+	BEQ @DONEHALF
+	LSR
+	DEY
+	JMP @HALVING
+@DONEHALF
+	CMP #$02
+	BCC @ZERO
+	JSR _RNG
+@ZERO
+	STA FAC,X
+	CPX #$00
+	BNE @RANDOM
+	;add/subtract to STATSUM values
+	JSR _MARGMAX ;get highest party
+	CMP #$00
+	BEQ @TIE
+	
+	TAX
+	DEX
+	LDA FAC,X
+	JSR _NEGATIV ;set only highest to negative
+	STA FAC,X
+	JMP @ADD
+@TIE
+	LDX #00 ;set random parties to negative
+@TIELOOP 
+	LDA #$02
+	JSR _RNG
+	BNE @FLIP
+	LDA FAC,X
+	JSR _NEGATIV
+	STA FAC,X
+@FLIP
+	INX
+	CPX S_PLAYER
+	BNE @TIELOOP
+@ADD
+	LDX #00
+	LDY #00
+	STX V_POPSUM+10
+	STX V_POPSUM+11 ;reset total and re-sum
+@ADDLOOP	
+	LDA V_POPSUM,Y
+	STA FSUS2
+	LDA FAC,X
+	STY FY1
+	JSR _ADDSUS
+	LDY FY1
+	LDA FSUS1
+	STA V_POPSUM,Y
+	CLC
+	ADC V_POPSUM+10
+	STA V_POPSUM+10
+	BCC @CARRY
+	INC V_POPSUM+11
+@CARRY
+	
+	INX
+	INY
+	INY
+	CPX S_PLAYER
+	BNE @ADDLOOP
+	
+	RTS
+
+;returns the party with the most EC
+_MAXEC
+	LDA #STATE_C
+	STA FARG5
+	JSR _SUMEC
+	JSR _MAXR
+	LDX #00
+@LOOP1 
+	LDA V_SUMEC,X
+	STA V_MAX,X
+	INX 
+	CPX #$08
+	BNE @LOOP1
+	JSR _MAX2
+	RTS
+
+;popular_vote_sum(FARG5 = state count)
+;awards ((EC-2) * state percent) for each state to each party
+_POPSUM2
+	LDA #00
+	LDX #00
+@CLEAR
+	STA V_POPULAR,X
+	INX
+	CPX #26
+	BNE @CLEAR
+
+	LDA #$01
+	STA FARG1
+	STA FSTATE
+	JSR _CPOFFS
+@STATELP
+	JSR _POPSUMR
+	JSR _STATSUM
+
+	LDA #00
+	STA V_PARTY
+@PARTYLP
+	LDA V_PARTY
+	ASL
+	TAY
+	JSR _PERCSTA2 ;move popsum to percentage arguments
+	JSR _PERCEN2 ;calculate percentage to FAC (do not convert to string)
+	JSR _FAC2ARG
+	LDX FSTATE
+	LDA V_EC,X
+	SEC
+	SBC #$02
+	TAY
+	LDA #00
+	JSR _162FAC ;EC - 2 to FAC
+	JSR _FMULTT ;percentage * (EC - 2)
+	
+	LDY V_PARTY
+	JSR _POP2OFF
+	LDY OFFSET+1
+	LDA OFFSET
+	JSR _FADD ;add to sum
+	LDY OFFSET+1
+	LDX OFFSET
+	JSR _MOVMF ;move new sum back
+	
+	INC V_PARTY
+	LDA V_PARTY
+	CMP S_PLAYER
+	BCC @PARTYLP
+	
+	LDA S_SUMUND
+	BEQ @DONEPT
+	
+	LDA V_PARTY
+	CMP #UND_PRTY+1
+	BEQ @DONEPT
+	
+	LDA #UND_PRTY
+	STA V_PARTY
+	BNE @PARTYLP
+	
+@DONEPT
+	JSR _CPOFFI
+	INC FSTATE
+	LDA FSTATE
+	CMP FARG5
+	BNE @STATELP
+	
+	LDA #00
+	STA V_PARTY
+	RTS
+
+;popular_percentage_by_party(FARG1 = party index)
+;finds the percentage of the total popular vote for one party
+;LOCAL: FVAR6
+_POPSUM2P	
+	LDY FARG1
+	JSR _POP2OFF
+	LDY OFFSET+1
+	LDA OFFSET
+	JSR _MOVFM
+	JSR _FAC2F3
+	
+	LDA S_SUMUND
+	BEQ @SUM
+	LDY #$B4
+	LDA #$01 ;436
+	JSR _162FAC
+	JMP @DIV
+@SUM ;sum all popular vote float values
+	+__LAB2O V_POPULAR
+	LDY OFFSET+1
+	LDA OFFSET
+	JSR _MOVFM
+	
+	LDA #01
+	STA FVAR6
+@LOOP
+	LDX #$01 ;advance to next float value
+	LDY #FLOATLEN
+	JSR _OFFSET
+	LDY OFFSET+1
+	LDA OFFSET
+	JSR _FADD
+	
+	INC FVAR6
+	LDA FVAR6
+	CMP S_PLAYER
+	BNE @LOOP
+@DIV
+	JSR _F32ARG
+	JSR _DIVIDE
+	JSR _FAC2STR
+	;JSR _PERCFMT
+	RTS
+	
+;state_cp_sum() 
+;sums all candidates' CP at current CP_ADDR/HS_ADDR
+;if draw_und is set, adds UND to total as well
+;adds result to V_POPSUM; for single-use, clear first
+_STATSUM 
+	LDY #01
+@LOOP 
+	JSR _STATSM2
+	CLC 
+	ADC V_POPSUM+10
+	STA V_POPSUM+10
+	BCC @NOC
+	INC V_POPSUM+11
+@NOC 
+	DEY 
+	TYA 
+	ASL 
+	TAX 
+	INY 
+	JSR _STATSM2
+	CLC 
+	ADC V_POPSUM,X
+	STA V_POPSUM,X
+	BCC @NOC2
+	INC V_POPSUM+1,X
+@NOC2 
+	INY 
+	CPY S_PLAY1M ;loop per player
+	BCC @LOOP
+	CPY #UND_OF1M
+	BEQ @RTS
+
+	LDY #UND_OFFS
+	LDA S_SUMUND
+	BEQ @RTS ;if draw und off, ignore
+	JMP @LOOP ;if on, add UND
+@RTS 
+	RTS 
+;sum from history check
+_STATSM2 
+	LDA V_SUMFH
+	BEQ @FROMCP
+	LDA (HS_ADDR),Y
+	RTS 
+@FROMCP 
+	LDA (CP_ADDR),Y
+	RTS 
+
+;percent_state(Y = party index * 2)
+;divides state CP by total, formats
+_PERCSTA 
+	JSR _PERCSTA2
+	JSR _PERCENT
+	RTS 
+_PERCSTA2
+	LDA V_POPSUM,Y
+	STA FARG1
+	LDA V_POPSUM+1,Y
+	STA FARG2
+	LDA V_POPSUM+10
+	STA FARG3
+	LDA V_POPSUM+11
+	STA FARG4
+	RTS
+
+;state_control_count(A = party)
+;counts the number of states party A is winning
+;(only on the map)
+;returns to A
+;LOCAL: FRET1,FY1
+_CTRLCNT 
+	TAY 
+	STY FY1
+	LDX #01
+	LDA #00
+	STA FRET1
+@LOOP 
+	LDA V_CTRL,X
+	CMP FY1
+	BNE @SKIPADD
+	INC FRET1
+@SKIPADD 
+	INX 
+	CPX #STATE_C
+	BNE @LOOP
+	RTS 
+
+;popsum_draw_combo() 
+_POPCOM1
+	JSR _POPSUM2
+	LDA S_SKIPGAME
+	BNE @RTS
+	LDA #STATE_C
+	STA FARG5
+	JSR _DRWPOP
+@RTS
+	RTS 
+	
+;candidate_display_loop() 
+;shows all candidates
+_CANDLOOP 
+	LDA #$00
+	STA V_REDRW1
+	STA V_PARTY
+	JSR _CANDLOAD
+@LOOP 
+	JSR _DRWCAND
+	JSR _CANDSWAP
+	JSR _FTC
+	LDA V_PARTY
+	BNE @LOOP
+	RTS 
+
+;pop_sum_reset() 
+;clears V_POPSUM
+_POPSUMR 
+	LDX #00
+	LDA #00
+@LOOPCLR STA V_POPSUM,X
+	INX 
+	CPX #$0C
+	BNE @LOOPCLR
+	RTS 
+
+;popular_vote_sum() 
+;draw_und set beforehand
+;sums ALL state cp by party, returns to v_popsum
+_POPSUM 
+	LDA #00
+	STA HS_ADDR
+	LDA #$01
+	STA FSTATE
+	JSR _CPOFFR
+@STLOOP
+
+	JSR _STATSUM
+	JSR _CPOFFI
+	INC FSTATE
+	LDA FSTATE
+	CMP #STATE_C
+	BNE @STLOOP
+	RTS 
+
+
+;max2nd() 
+;max2() but instead gets the second highest value
+;only guaranteed a second value, not a second party
+;quits if initial tie
+_MAX2ND
+	JSR _MAX2
+	
+	BEQ @TIE
+	ASL 
+	TAY 
+	DEY 
+	DEY 
+	LDA #$00
+	STA V_MAX,Y
+	STA V_MAX+1,Y
+	JSR _MAX2
+@TIE 
+	RTS 
+
+;max2() 
+;2B maximum where values are (L)(H) pairs in V_MAX
+;LOCAL: FRET1-2
+;returns to MAXLOW/MAXHIGH; if not tie, A = index
+_MAX2 
+	LDX #01
+	JSR _MAXA
+	LDX #01
+	JSR _MAXB
+	PHA 
+	LDA FRET1
+	STA MAXHIGH
+	PLA 
+	BNE @NOTTIE
+	LDX #00
+	JSR _MAXA
+	LDX #00
+	JSR _MAXB
+	PHA 
+	LDA FRET1
+	STA MAXLOW
+	PLA 
+@NOTTIE 
+	RTS 
+
+;max_a(x = V_MAX offset)
+;FRET1 = maximum value
+;put maximum value in FRET1
+_MAXA 
+	LDY #$01
+	LDA #00
+	STA FRET1
+	STA FRET2
+@LOOP 
+	LDA V_MAX,X
+	CMP FRET1
+	BCC @SKIPSTA
+	STA FRET1
+@SKIPSTA 
+	INX 
+	INX 
+	INY 
+	CPY S_PLAY1M
+	BNE @LOOP
+
+	RTS 
+
+
+;max_b(X = V_MAX offset)
+;returns A = index + 1 (0 for tie)
+_MAXB 
+
+	LDY #01
+@RLOOP 
+	LDA V_MAX,X
+	CMP FRET1
+	BNE @SKIP
+	LDA FRET2
+	BNE @TIE
+	STY FRET2
+@SKIP 
+	INX 
+	INX 
+	INY 
+	CPY S_PLAY1M
+	BNE @RLOOP
+
+	LDA FRET2
+	RTS 
+@TIE 
+	LDA #00
+	RTS 
+
+;max_reset() 
+_MAXR 
+	LDX #00
+	LDA #00
+@LOOP 
+	STA V_MAX,X
+	INX 
+	CPX #$08
+	BNE @LOOP
+	RTS 
+
+;und_setup() 
+_UNDCP 
+	JSR _CPOFFR
+	LDA #01
+	STA FSTATE
+@LOOP 
+	LDX FSTATE
+	LDA #147
+	CLC 
+	ADC V_EC,X
+	ADC V_EC,X
+	;255 - (54 - EC);2 = 147 + EC;2
+	LDY #UND_OFFS
+	STA (CP_ADDR),Y
+	JSR _CPOFFI
+	INC FSTATE
+	LDA FSTATE
+	CMP #STATE_C
+	BNE @LOOP
+	RTS 
+	
+;color_map() 
+;maps party control for all states to map color
+;does NOT set party control -- use _STCTRL or _FINALCP
+_MAPCOL 
+	JSR _CPOFFR
+	LDA #01
+	STA FSTATE
+@LOOP 
+	LDX FSTATE
+	LDA V_CTRL,X
+	TAY 
+	LDA V_PTCOL,Y
+	STA V_STCOL,X
+
+	LDA V_COLMSK,X
+	BEQ @SKIPMSK ;if mask is nonzero, blank state
+	LDY #UND_PRTY
+	LDA V_PTCOL,Y
+	STA V_STCOL,X
+@SKIPMSK 
+
+	JSR _CPOFFI
+	INC FSTATE
+	LDA FSTATE
+	CMP #STATE_C
+	BNE @LOOP
+	RTS 
+	
+;skip_game_check()
+;if all players are AIs AND quick game is on, activates S_SKIPGAME
+_SKIPCHK
+	LDA S_QUICKG
+	BEQ @RTS
+	LDX #00
+@LOOP
+	LDA V_AI,X
+	BEQ @RTS
+	INX
+	CPX S_PLAYER
+	BNE @LOOP
+	LDA #$01
+	STA S_SKIPGAME
+@RTS	
+	RTS
+
+;clears poll-by-region counts
+_CLRPOLL
+	LDX #$00
+@CLR3
+	STA V_POLL,X
+	INX
+	CPX #REGION_C
+	BNE @CLR3
+	RTS
+	
+;calculate_popular_vote_winner()
+;POPSUM called beforehand
+;stores winning party index + 1 to V_POPWIN
+_POPWIN
+	LDA #00
+	STA FVAR1
+	LDA #00
+	LDY #00
+	JSR _162FAC ;FAC = 0
+@TIE3 
+	LDY FVAR1
+	JSR _POP2OFF ;V_POPULAR should be loaded
+	LDA OFFSET
+	LDY OFFSET+1
+	JSR _FCOMP
+	CMP #$FF
+	BNE @LESSEQ
+	LDA OFFSET
+	LDY OFFSET+1
+	JSR _MOVFM ;set new maximum to FAC
+@LESSEQ
+	INC FVAR1
+	LDA FVAR1
+	CMP S_PLAYER
+	BNE @TIE3
+	;max popular vote value is in FAC
+	LDA #00
+	STA FVAR1
+	LDA #$FF
+	STA FX1 ;party list index (must be set to an index; if it is set twice, quit)
+@TIE3L2 
+	LDY FVAR1
+	JSR _POP2OFF
+	LDA OFFSET
+	LDY OFFSET+1
+	JSR _FCOMP
+	CMP #00
+	BNE @NOTMAX
+	LDX FX1
+	CPX #$FF
+	BNE @FALSE ;quit
+	LDX FVAR1
+	STX FX1
+@NOTMAX
+	INC FVAR1
+	LDA FVAR1
+	CMP S_PLAYER
+	BNE @TIE3L2
+	LDX FX1
+	INX
+	TXA
+	JMP @RTS
+@FALSE
+	LDA #00
+@RTS
+	STA V_POPWIN
 	RTS

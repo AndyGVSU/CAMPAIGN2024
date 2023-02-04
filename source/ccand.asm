@@ -14,7 +14,8 @@ _CANDSWAP
 	BNE @WRAP
 	LDA #00
 	STA V_PARTY
-@WRAP JSR _CANDLOAD
+@WRAP 
+	JSR _CANDLOAD
 	RTS 
 
 ;candidate_save(A=party index)
@@ -25,7 +26,8 @@ _CANDSAVE
 	LDY #CANDDATA
 	JSR _OFFSET
 	LDY #00
-@LOOP LDA C_SCHEDC,Y
+@LOOP 
+	LDA C_SCHEDC,Y
 	STA (OFFSET),Y
 	INY 
 	CPY #CANDDATA
@@ -109,6 +111,19 @@ _CANDSEL
 @SELECTD 
 	LDA V_PARTY
 	STA C_PARTY
+	
+	LDA C_HOME
+	STA FARG1
+	JSR _CPOFFS
+	LDA #UND_OFFS
+	CLC
+	ADC V_PARTY
+	TAY
+	INY
+	LDA (CP_ADDR),Y
+	CLC
+	ADC #$02
+	STA (CP_ADDR),Y ;STATE LEAN + 2 in home state
 	
 	JSR _PLAYINP
 	JSR _DRWINCM
@@ -219,7 +234,7 @@ _CANDSEL3
 	JSR _GX_CHAR
 	INC FVAR1
 	LDA FVAR1
-	CMP #$05
+	CMP #ISSUEC
 	BNE @ISSUES
 	JSR _DRWCAND
 	
@@ -236,14 +251,16 @@ _CPYPRIM
 	JSR _OFFSET
 	LDY #01
 	LDX #00
-@PSLOOP LDA (OFFSET),Y
+@PSLOOP 
+	LDA (OFFSET),Y
 	STA C_CHAR,X
 	INY 
 	INX 
 	CPX #$05
 	BNE @PSLOOP
 	LDX #00
-@ISLOOP LDA (OFFSET),Y
+@ISLOOP 
+	LDA (OFFSET),Y
 	STA C_ISSUES,X
 	INY 
 	INX 
@@ -262,8 +279,10 @@ _CPYPRIM
 	INY 
 	LDA (OFFSET),Y
 	STA C_MONEY
-
-
+	INY
+	LDA (OFFSET),Y
+	LDX V_PARTY
+	STA V_PROFILE,X
 	RTS 
 
 ;setup_player_names() 
@@ -355,7 +374,8 @@ _CANDGEN
 	JSR _RNG
 	BEQ @ROLLSTA ;home state index
 	STA FVAR5
-
+	JSR _4PREGSTA
+	
 	LDY #$06
 @NEXTISS ;issues
 	LDA #00
@@ -378,7 +398,7 @@ _CANDGEN
 	
 	LDA S_CLASSC
 	BNE @NO_ODD
-	
+	;+/- 
 	LDA #$02
 	JSR _RNG
 	BNE @RPLUS1
@@ -387,6 +407,7 @@ _CANDGEN
 @RPLUS1 
 	INX 
 @NO_ODD 
+	;store issue value
 	TXA 
 	STA (OFFSET),Y
 	INY 
@@ -426,6 +447,11 @@ _CANDGEN
 	INY 
 	STA (OFFSET),Y ;random funds
 @SKIPBON 
+	INY
+	LDA #$FF
+	JSR _RNG
+	STA (OFFSET),Y ;random profile
+
 	LDY #$10
 	LDX #$01
 	JSR _OFFSET
@@ -496,6 +522,31 @@ _GENMONEY
 	ADC #70
 @BONVAL
 	RTS
+	
+;4p_regional_home_state()
+;selects a state from the home region with EC < 20
+_4PREGSTA
+	LDA S_PLAYER
+	CMP #$04
+	BNE @RTS
+	LDA S_4PMODE
+	BEQ @RTS
+	
+	LDX V_PARTY
+	LDA V_4PREG,X
+	TAX
+	LDA D_REGC-1,X
+	JSR _RNG
+	CLC
+	ADC D_REGLIM-1,X
+	TAX
+	LDA V_EC,X
+	CMP #20
+	BCS _4PREGSTA
+	STX FVAR5
+@RTS
+	RTS
+	
 ;issue_candidate_X() 
 ;generates issue value for selected party
 ;LOCAL: FRET3
@@ -543,13 +594,36 @@ _ISSUECW
 	LDA V_MAX,X
 	STA FRET3
 	RTS 
+;regional issue(FVAR5 = home state) 
+;takes values from home state
+;LOCAL: FY1
+_ISSUECREG
+	+__O2O2 ;store offset
+	STY FY1
+	LDA FVAR5
+	STA FARG1
+	JSR _CPOFFS
+	LDA FY1
+	SEC
+	SBC #$06 ;the current generated candidate offset
+	TAY
+	LDA (IS_ADDR),Y
+	STA FRET3
+	+__O2O
+	LDY FY1
+	RTS
 
 ;issue_select() 
 ;chooses which party to select issue for
 _ISSUSEL 
+	LDA S_4PMODE
+	BEQ @4PREG
+	JSR _ISSUECREG
+	RTS
+@4PREG
+	
 	LDA V_PARTY
 	BNE @REP
-
 
 	JSR _ISSUECD
 	RTS 
@@ -662,9 +736,11 @@ _COPYCOL
 ;3_player_setup() 
 ;switches PAT to IND, state lean changes
 _SETUP3P 
-	LDA V_PTCHAR+5
-	STA V_PTCHAR+2
-
+	LDA S_PLAYER
+	CMP #$03
+	BEQ @CONTIN
+	RTS
+@CONTIN
 	LDA S_3PMODE
 	BNE @WORKERS
 
@@ -685,16 +761,9 @@ _SETUP3P
 	STA FARG5
 	JSR _COPY ;copy WORKERS over PATRIOT
 @INDEPEN 
-	LDX #00
-@3CHR 
-	LDA V_PTCHR3+20,X
-	STA V_PTCHR3+8,X
-	INX 
-	CPX #$04
-	BNE @3CHR
 
 	JSR _3PLEAN
-	;ind target megastates
+	;target megastates
 	LDA #$FF
 	JSR _RNG
 	AND #$01
@@ -707,6 +776,49 @@ _SETUP3P
 	STA V_INDSTA+1
 
 	RTS 
+
+;four_player_setup()
+;for regional mode only
+_SETUP4P
+	LDA S_4PMODE
+	BNE @CONTIN
+	RTS
+@CONTIN
+	LDA #$00
+	STA V_PARTY
+@REGLOOP
+	LDA #$02
+	JSR _RNG
+	CLC
+	ADC V_PARTY
+	ADC V_PARTY
+	TAX
+	LDA D_4PREG,X
+	LDX V_PARTY
+	STA V_4PREG,X ;set party region
+	TAX
+	JSR _DRWREGN3
+	+__LAB2A V_STRING
+	+__LAB2O D_PARTY
+	LDX V_PARTY
+	LDY #11
+	JSR _OFFSET
+	LDA OFFSET
+	STA FARG3
+	LDA OFFSET+1
+	STA FARG4
+	LDA #09
+	STA FARG5
+	JSR _COPY
+	
+	INC V_PARTY
+	LDA V_PARTY
+	CMP S_PLAYER
+	BNE @REGLOOP
+	
+	LDA #00
+	STA V_PARTY
+	RTS
 
 ;three_player_state_lean()
 ;sets 3-player megastate leans
@@ -746,17 +858,52 @@ _INITCP
 	LDX FSTATE
 	CPX #STATE_C-1
 	BEQ @RTS
+	
+	TXA
+	LSR
+	TAX
 	LDA D_INITCP,X
 	STA FVAR3
+	LDA FSTATE
+	AND #$01
+	BEQ @EVEN
+@ODD
+	LDA FVAR3
 	AND #$0F
 	STA FVAR1 ;D LEAN
+	JMP @RLEAN
+@EVEN
 	LDA FVAR3 ;loaded data
 	LSR 
 	LSR 
 	LSR 
 	LSR 
 	AND #$0F
+	STA FVAR1 ;D LEAN
+@RLEAN
+	LDA FVAR1
+	CMP #$06
+	BCS @SUB
+	CMP #$05
+	BEQ @EQUAL
+	LDA #$05
+	SEC
+	SBC FVAR1
+	STA FVAR3 ;hold diff
+	LDA #$05
+	CLC
+	ADC FVAR3
+	JMP @EQUAL
+@SUB
+	SEC
+	SBC #$05
+	STA FVAR3 ;hold diff
+	LDA #$05
+	SEC
+	SBC FVAR3
+@EQUAL	
 	STA FVAR2 ;R LEAN
+	
 	JSR _INITCP2 ;3/4 player cp
 	JSR _CPOFFI ;inc addr
 	INC FSTATE
@@ -770,11 +917,11 @@ _INITCP2
 	LDY #UND_OFFS
 	STA (CP_ADDR),Y
 	
-	LDA FVAR2
-	LDY #$02
-	JSR _CP5STOR
 	LDA FVAR1
 	LDY #$01
+	JSR _CP5STOR
+	LDA FVAR2
+	LDY #$02
 	JSR _CP5STOR
 	
 	LDA S_PLAYER
@@ -784,18 +931,9 @@ _INITCP2
 
 @OVER2P
 	BEQ @3P
-	LDA FVAR1
-	CMP #$05
-	BCS @SOC
-	;DEC FVAR1
-	;INC FVAR2
-	DEC FVAR2
-	JMP @4P
-@SOC
-	;INC FVAR1
-	;DEC FVAR2
-	DEC FVAR1
-@4P
+	
+	LDA S_4PMODE
+	BNE @REGIONAL
 	+__SWAP FVAR1,FVAR2,FVAR3
 	LDY #$03
 	LDA FVAR1
@@ -803,6 +941,19 @@ _INITCP2
 	LDY #$04
 	LDA FVAR2
 	JSR _CP5STOR
+	RTS
+@REGIONAL
+	LDY #$01
+@REGLOOP
+	JSR _4PLEAN
+	JSR _CP5STOR
+	TYA
+	SEC
+	SBC #$05
+	TAY
+	INY
+	CPY #$05
+	BNE @REGLOOP
 	RTS
 @3P
 	LDA FSTATE
@@ -815,7 +966,7 @@ _INITCP2
 	BEQ @3BONUS
 	
 	LDA FVAR1
-	CMP #$07
+	CMP #$08
 	BCS @NOTLEAN
 	CMP #$03
 	BCC @NOTLEAN
@@ -832,6 +983,35 @@ _INITCP2
 	LDY #$03
 	LDA FVAR3
 	JSR _CP5STOR
+	RTS
+
+;4p_region_lean(FY1 = party index + 1)
+;LOCAL: FX1
+_4PLEAN
+	STY FY1
+	LDX FSTATE
+	INX
+	TXA
+	JSR _STATEGR
+	STX FX1
+	
+	LDX FY1
+	DEX
+	TXA
+	ASL
+	TAX
+	LDA D_4PREG,X
+	CMP FX1
+	BEQ @BONUS
+	LDA D_4PREG+1,X
+	CMP FX1
+	BEQ @BONUS
+	LDA #$05
+	JMP @RTS
+@BONUS
+	LDA #$07
+@RTS
+	LDY FY1
 	RTS
 
 ;init_cp_issues() 
@@ -983,17 +1163,61 @@ _CANDSS2
 
 	RTS 
 
-;candidate_display_loop() 
-;shows all candidates
-_CANDLOOP 
-	LDA #$00
-	STA V_REDRW1
-	STA V_PARTY
-	JSR _CANDLOAD
-@LOOP 
-	JSR _DRWCAND
-	JSR _CANDSWAP
+;3p_party_select()
+_3PPARTY
+	LDA S_PLAYER
+	CMP #$03
+	BNE @RTS
+@FTC
+	JSR _CLRBR
+
+	+__COORD P_CONVNR,P_CONVNC
+	+__LAB2XY T_3PARTY
+	JSR _GX_STR
+	
+	+__COORD P_NOYESR,P_NOYESC-1
+	LDX #$05
+	JSR _3PPARTY2
+	+__COORD P_NOYESR+1,P_NOYESC-1
+	LDX #$06
+	JSR _3PPARTY2
+	
+	LDX #P_NOYESR
+	LDY #P_NOYESR+1
+	JSR _RSELECT
+	STA S_3PMODE
 	JSR _FTC
-	LDA V_PARTY
-	BNE @LOOP
-	RTS 
+	BNE @FTC
+@RTS
+	RTS
+;X = party name index
+_3PPARTY2
+	LDA D_PTCOL2,X
+	STA GX_DCOL
+	+__LAB2O D_PARTY
+	LDY #11
+	JSR _OFFSET
+	+__O2XY
+	JSR _GX_STR
+	RTS
+	
+;4p_party_select()
+_4PPARTY
+	LDA S_PLAYER
+	CMP #$04
+	BNE @RTS
+@FTC
+	JSR _CLRBR
+
+	+__COORD P_CONVNR,P_CONVNC
+	+__LAB2XY T_4PARTY
+	JSR _GX_STR
+	
+	LDX #P_NOYESR
+	LDY #P_NOYESR+1
+	JSR _RSELECT
+	STA S_4PMODE
+	JSR _FTC
+	BNE @FTC
+@RTS
+	RTS
