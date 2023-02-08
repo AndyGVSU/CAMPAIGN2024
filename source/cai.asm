@@ -697,7 +697,7 @@ _AIHLIST2V
 	CMP #AIPSYCH
 	BNE @PSYCH
 	LDX FSTATE
-	JSR _VISLOG
+	;JSR _VISLOG
 	BCC @PSYCH
 	JMP @FALSE
 @PSYCH
@@ -1215,21 +1215,6 @@ _AICSORT
 	STX FVAR1
 	JMP @LOOP3
 @RTS
-	RTS
-
-;get_vislog_limit(X = state index)
-;returns compare to either 6 VISITS or 12 VISITS
-_VISLOG
-	LDA S_PLAYER
-	CMP #$04
-	BEQ @4PLAYER
-	
-	LDA V_VISLOG,X
-	CMP #06 ;a state may be visited no more than 6 times in total
-	RTS
-@4PLAYER
-	LDA V_VISLOG,X
-	CMP #12
 	RTS
 
 ;get_nopoll_multiplier()
