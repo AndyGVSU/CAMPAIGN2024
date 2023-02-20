@@ -1,0 +1,20 @@
+CAMPAIGN MANAGER 2024 -- Utility Guide
+
+Python is required to run these scripts.
+
+python custom_us.py [vanilla CAMPAIGN 2024 ROM filename] [custom map filename]
+
+Allows a custom map (EC, STATE LEANS, ISSUES) to be modded into a CAMPAIGN MANAGER 2024 ROM (C64 only). The new ROM [original name+"mod"] is your custom ROM.
+
+Custom map format: (the original game map is included as an example)
+STATE 1 (ME): R LEAN, D LEAN, ISSUES, EC
+e.g. 4,5,2,3,5,5,4,4
+STATE 2...
+STATE 51 (HI)...
+newline  
+
+See "custom1984.txt" for an example -- this is the original CAMPAIGN MANAGER map.
+
+python random_map.py [output custom map filename]
+
+Generates a random map text file, made to be as even as possible in a 2-player match. Apply to the ROM using the custom map proceedure.

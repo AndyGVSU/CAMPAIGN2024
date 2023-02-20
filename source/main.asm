@@ -916,8 +916,7 @@ D_INITCP !binary "source/DATAINITCP.dat"
 D_ISSUE !binary "source/DATAISSUES.dat"
 D_EC !binary "source/DATAECOLLEGE.dat"
 
-_DATAEND 
-!16 $a7,(_DATAEND - D_INITCP)
+_DATAEND
 DATASIZE = _DATAEND-DATA2024
 ;music files must be compiled with respective addresses separately using GoatTracker (F9 to compile)
 MUSIC = $7600
@@ -950,4 +949,4 @@ _MUSICEND
 !if _MUSICEND >= BASE2 {
 	!error "third partition exceeds variable $8700"
 }
-
+!16 (_MUSICEND - D_INITCP + 2)
