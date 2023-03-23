@@ -1566,6 +1566,7 @@ _SKIPCHK
 ;clears poll-by-region counts
 _CLRPOLL
 	LDX #$00
+	STX V_POLLCT
 @CLR3
 	STA V_POLL,X
 	INX

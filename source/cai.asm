@@ -167,9 +167,12 @@ _HARDAI
 	LDA FARG1
 	JSR _AISETREG
 	
+	LDA V_WARN
+	BNE @TOOLOW
 	JSR _HARDW9 ;week 9 end with TV ADS if enough money/health
 	BNE @TVLIMIT
-	
+@TOOLOW
+
 	LDA #ACT_VISIT
 	JSR _SCHADD
 	
