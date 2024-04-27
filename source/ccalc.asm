@@ -2,17 +2,6 @@
 ;CAMP02 
 ;game math
 
-;cp_+5_store() 
-;stores to current cp addr and +5
-_CP5STOR STA (CP_ADDR),Y
-	INY 
-	INY 
-	INY 
-	INY 
-	INY 
-	STA (CP_ADDR),Y
-	RTS 
-
 ;detailed_results(FSTATE = state)
 ;draws history results for a state
 ;LOCAL: FVAR1
@@ -20,15 +9,10 @@ _DETAIL
 	JSR _MAXR
 	LDA #$01
 	STA V_SUMFH
-	LDA #>V_HIST
-	STA HS_ADDR+1
 	LDA FSTATE
-	STA FARG1
 	JSR _CPOFFS
 	JSR _GX_CLRS
 	;draw header
-	DEC HS_ADDR+1
-
 	LDA #P_LEFT
 	STA GX_CCOL
 	LDA #P_DETSTR
@@ -38,29 +22,57 @@ _DETAIL
 	LDA FSTATE
 	JSR _DRWPOST
 	INC GX_CCOL
-	INC GX_CCOL
 	+__LAB2XY T_HIST
 	JSR _GX_STR
 
+	LDA #P_DETLHR
+	STA GX_CROW
+	LDA #P_LEFT
+	STA GX_CCOL
+	
+	LDA #23 ;W
+	JSR _GX_STR2
+	
 	LDA #00
+	STA FVAR1
+@HEADERLP
+	INC GX_CCOL
+	LDX FVAR1
+	JSR _DRWPN3
+	INC FVAR1
+	LDX FVAR1
+	CPX S_PLAYER
+	BNE @HEADERLP
+	
+	INC GX_CCOL
+	
+	+__LAB2XY T_DETAILED
+	JSR _GX_STR
+	
+	INC GX_CCOL
+	INC GX_CCOL
+	INC GX_CCOL
+	
+	+__LAB2XY T_RATINGS2+9
+	JSR _GX_STR
+	
+	LDA #01
 	STA V_WEEK
 	LDA #P_DETLR
 	STA GX_CROW
 @WEEKLOOP 
-	INC HS_ADDR+1
+	JSR _HSOFFS
+	LDX FSTATE
+	JSR _HSOFFS2
 	;draw row
 	LDA #P_LEFT
 	STA GX_CCOL
 	;draw row
-	LDA #01
-	STA S_SUMUND
-	JSR _POPSUMR
-	JSR _STATSUM
-
+	
 	LDA V_WEEK
-	CMP #$0A
+	CMP #WEEKMAX+1
 	BEQ @FINALW
-	CMP #$0B
+	CMP #WEEKMAX+2
 	BEQ @TOTAL
 	
 	ORA #$30
@@ -77,9 +89,13 @@ _DETAIL
 	STA GX_DCOL
 	JSR _GX_CHAR
 @FIN
+	LDA #01
+	STA V_MARGIN
+	JSR _PCTRL ;calculates all fixed margins AND the actual margin
+	STA FVAR4 ;winner index
+	
 	LDY #00
-	STY FVAR1
-
+	STY FVAR1 ;party index
 	INC GX_CCOL
 @PTLOOP 
 	INC GX_CCOL
@@ -87,35 +103,27 @@ _DETAIL
 	LDY FVAR1
 	LDA V_PTCOL,Y
 	STA GX_DCOL
-	TYA 
-	ASL 
-	TAY 
-	JSR _PERCSTA
+	
+	LDX FVAR1
+	JSR _LDAFPERC
+	JSR _PERCTRUNC
+	LDX FVAR1
+	LDA V_PTCOL,X
+	STA GX_DCOL
+
 	+__LAB2XY V_FPOINT
 	JSR _GX_STR
+	
 	INC FVAR1
 	LDY FVAR1
-	CPY #05
-	BEQ @WEEKDONE
 	CPY S_PLAYER
 	BNE @PTLOOP
-	LDY #UND_PRTY
-	STY FVAR1
-	BNE @PTLOOP
-@WEEKDONE 
+
 	INC GX_CCOL
-	;recalc total without UND
-	LDA #00
-	STA S_SUMUND
-	JSR _POPSUMR
-	JSR _STATSUM
-	JSR _SFVAR
-	JSR _MARGIN
+	LDA FVAR4
+	CMP #UND_PRTY
 	BEQ @TIE
-	DEC FVAR4
-	LDA FVAR4 ;get control party
 	STA FX1
-	JSR _LFVAR
 
 	LDX FX1
 	JSR _DRWPN1
@@ -124,22 +132,39 @@ _DETAIL
 	JSR _GX_CHAR
 
 	INC GX_CCOL
+	LDA #<V_MARGINF
+	LDY #>V_MARGINF
+	JSR _MOVFM
+	JSR _FDIV10
+	JSR _FDIV10
+	JSR _STRPERC
 	+__LAB2XY V_FPOINT
 	JSR _GX_STR
 	JMP @SKIPTIE
 @TIE 
-	JSR _LFVAR
 	+__LAB2XY T_TIE
 	JSR _GX_STR
-@SKIPTIE 
+@SKIPTIE
+	JSR _DRWSPAC
+	JSR _LEANDIF2
+	JSR _LEANDIF3
+	LDX FRET1
+	JSR _DRWRATING2
+ 
 	JSR _GXINCRW
 	INC V_WEEK
 	LDA V_WEEK
-	CMP #$0C
-	BEQ @SKIPLOOP
+	CMP #WEEKMAX+2
+	BEQ @HISTOFF
+	CMP #WEEKMAX+3
+	BEQ @RTS
 	JMP @WEEKLOOP
-@SKIPLOOP 
-	RTS 
+@RTS
+	RTS
+@HISTOFF
+	LDA #00
+	STA V_SUMFH
+	JMP @WEEKLOOP
 
 ;mask() 
 ;blanks map
@@ -155,6 +180,9 @@ _FILMASK
 
 ;sum_ec(FARG5 = state limit (usually STATE_C))
 ;sums EC by party control
+_SUMEC2
+	LDA #STATE_C
+	STA FARG5
 _SUMEC 
 	LDA #00
 	TAX 
@@ -168,8 +196,8 @@ _SUMEC
 	LDY #01
 	STY FSTATE
 @LOOP 
-	LDY FSTATE
-	LDA V_CTRL,Y
+	LDX FSTATE
+	JSR _LDACTRL
 	ASL 
 	TAX 
 	LDA V_SUMEC,X
@@ -181,12 +209,35 @@ _SUMEC
 	INC V_SUMEC+1,X
 @CARRY 
 
-
 	INC FSTATE
 	LDA FSTATE
 	CMP FARG5
 	BNE @LOOP
 
+	LDA #00
+	STA FPARTY
+	STA V_LANDSLIDE
+@LANDSLIDE
+	LDA FPARTY
+	ASL
+	TAX
+	LDA V_SUMEC,X
+	TAY
+	LDA V_SUMEC+1,X
+	JSR _162FAC
+	LDA #<V_PLURALF
+	LDY #>V_PLURALF
+	JSR _FCOMP
+	BMI @SKIP
+	LDX FPARTY
+	INX
+	STX V_LANDSLIDE
+@SKIP
+	INC FPARTY
+	LDA FPARTY
+	CMP S_PLAYER
+	BNE @LANDSLIDE
+	
 	RTS 
 
 ;state_get_region(A=state index)
@@ -203,16 +254,15 @@ _STATEGR
 ;for pregame / lastminute -- all states
 ;directly adds base value CP + issue bonus at no cost
 ;DOES add CP / 4 to opponents
-;LOCAL: FVAR3,FARG3
+;LOCAL: FARG3
 _NATCAMP 
 	LDA FARG1
 	STA FARG3
 
 	LDA #STATE_C
-	STA FVAR3
+	STA HIGHSTATE
 	LDA #01
 	STA FSTATE
-	STA FARG1
 @OFFSET 
 	JSR _CPOFFS
 @LOOP 
@@ -228,26 +278,23 @@ _NATCAMP
 	ADC FARG2
 	LSR ;(issue ; 2 + base) / 2 
 	STA FRET1
-
-	JSR _ADDCPU
+	
+	JSR _ADDCP
 	JSR _CPOFFI
 	INC FSTATE
 	LDA FSTATE
-	CMP FVAR3
+	CMP HIGHSTATE
 	BNE @LOOP
 
 	LDX FARG3
 	BEQ @RTS
-	LDA D_REGLIM,X
-	STA FVAR3
-	LDA D_REGLIM-1,X
-
-
-	STA FSTATE
-	STA FARG1
+	
+	JSR _LREGLIM
 	LDA #00
 	STA FARG3
-	BEQ @OFFSET
+	LDA LOWSTATE
+	STA FSTATE
+	JMP @OFFSET
 @RTS 
 	RTS 
 
@@ -284,123 +331,101 @@ _PSTCAMP
 	JSR _MAPCOL
 	RTS 
 
-;add_cp_from_undecided(FRET1 = CP GAIN)
-;takes CP from UND and adds to current; if UND out, /4
-;CP_ADDR = current state
-;LOCAL: FVAR6
-_ADDCPU
-	LDA #$00
-	STA FVAR6 ;do _ADDCPU2
-
-	LDY V_LSTATE
-	LDA #00
-	STA V_REVERT,Y
-	JMP _ADDCPUN2
-;add_cp_from_undecided_no_revert
-;call for REVERT LEAN
-_ADDCPUN
-	LDA #$01
-	STA FVAR6
-_ADDCPUN2
-	LDA S_PLAYER
-	CMP #$04
-	BNE @HALVE
-	LSR FRET1 ;1/2 CP IN 4 PLAYER GAME
-@HALVE
-	LDY V_LSTATE ;current cp_addr state
-	LDA V_UNDCP,Y
-	CMP FRET1
-	BCC @LESSUND
-	;if more or equal UND CP than CP gain:
-	LDY #UND_OFFS
-	LDA (CP_ADDR),Y
-	SEC 
-	SBC FRET1
-	STA (CP_ADDR),Y
-	BCS @OVERFLW
-	LDA #$00 ;can occur due to V_UNDCP use
-	STA (CP_ADDR),Y
-@OVERFLW 
-	LDY V_PARTY
-	INY 
-	LDA (CP_ADDR),Y
-	CLV 
-	CLC 
-	ADC FRET1
-	JSR _ADDCPU1
+;add_cp(FRET1 = CP GAIN)
+;CP is added to index V_PARTY
+_ADDCP
 	LDA FRET1
-	TAX 
-	JSR _ADDCPU2
+	JSR _ADDCP2
+@RTS
 	RTS 
-	;if less UND than CP gain:
-@LESSUND 
-	TAX 
+;add_cp(CP_ADDR set, A = CP gain)
+;does the actual adding
+_ADDCP2
+	BEQ @RTS ;if CP gain is zero, quit
+	STA FVAR3 ;added CP
 	LDY V_PARTY
-	INY 
-	CLV 
-	CLC 
+	LDA (CP_ADDR),Y
+	JSR _GETLEVEL
+	STX FVAR1 ;current level
+	LDA FVAR3
+	JSR _MULTLEVEL
+	CLC
 	ADC (CP_ADDR),Y
-	BCC @OVER2
-	LDA #$FF
-@OVER2	
-	STA (CP_ADDR),Y ;add all of UND to the gaining party
-	JSR _ADDCPU2 ;add 1/4 of the same amount to all other parties
-	
-	LDA S_CLASSC
-	BNE @NO4
-	
-	LDA FRET1
-	LDY #UND_OFFS
-	SEC 
-	SBC (CP_ADDR),Y ;take the remainder (gain - UND)/4 and add to the gaining party (not opponents!)
-	LSR 
-	LSR 
-	LDY V_PARTY
-	INY 
-	CLC 
-	ADC (CP_ADDR),Y
-	JSR _ADDCPU1
+	BEQ @RTS ;cap to $FF
+	STA FVAR2 ;hypothetical final CP 
+	LDX FVAR1
+	CLV
+	SEC
+	SBC D_CPLEVEL,X
+	BVS @DONE
+	BPL @CARRYOVER
+	JMP @DONE
+@CARRYOVER
+	INC FVAR1 ;level + 1
+	LDX FVAR1
+	JSR _MULTLEVEL
+	LDX FVAR1
+	DEX
+	CLC
+	ADC D_CPLEVEL,X
 	STA (CP_ADDR),Y
-@NO4
-	LDY #UND_OFFS
-	LDA #00
-	STA (CP_ADDR),Y
-	RTS 
-;check for overflow store (cap to #$FF)
-_ADDCPU1 
-	BCC @NOVERF
-	LDA #$FF
-@NOVERF 
-	STA (CP_ADDR),Y
-	RTS 
-;add CP/4 to other candidates
-_ADDCPU2 
-	LDA FVAR6
-	BNE @DONE
-	INY 
-	CPY #$05
-	BNE @WRAP
-	LDY #$01
-@WRAP 
-	INC V_PARTY
-	CPY V_PARTY
-	BNE @RTS
-	DEC V_PARTY
+	TYA
+	CLC
+	ADC #CPBLEAN
+	TAY
+	LDA (CP_ADDR),Y
+	CLC
+	ADC #$01
+	CMP #16
+	BEQ @SKIP
+	STA (CP_ADDR),Y ;SL + 1
+@SKIP 
+	JMP @RTS
 @DONE
-	RTS 
-@RTS 
-	DEC V_PARTY
-	TXA 
-	LSR 
-	LSR 
-	CLC 
-	ADC (CP_ADDR),Y
-	BCC @NOVERF
-	LDA #$FF
-@NOVERF 
+	LDA FVAR2 
 	STA (CP_ADDR),Y
-	JMP _ADDCPU2
+@RTS
+	RTS
 
+;get_cp_level(A = CP)
+;determines the current level based on current CP
+;returns X = level
+_GETLEVEL
+	LDX #00
+	CMP D_CPLEVEL+0
+	BCC @RTS
+	INX
+	CMP D_CPLEVEL+1
+	BCC @RTS
+	INX
+	CMP D_CPLEVEL+2
+	BCC @RTS
+	INX
+	CMP D_CPLEVEL+3
+	BCC @RTS
+	INX
+@RTS
+	RTS
+	
+;apply_level_multiplier(A = CP, X = level)
+;halves A X times (to 1 at minimum)
+_MULTLEVEL
+	CPX #04
+	BCS @ONE
+@LOOP
+	CPX #00
+	BEQ @DONE
+	LSR
+	DEX
+	BNE @LOOP
+@DONE
+	CMP #00
+	BEQ @ONE
+	RTS
+@ONE
+	LDA #01
+	RTS
+	
 ;calc_issue_bonus(FARG1=state index)
 ;IS_ADDR set beforehand
 ;adds issue bonus for current candidate to FRET1
@@ -412,25 +437,12 @@ _CISSUEB
 	DEY 
 	BPL @LOOP
 	;end of loop
-	LDA S_GMMODE
-	BEQ @INDBON ;skipped for random mode
-; ASL FRET1 ;issue bonus ; 2 in random mode
-	JMP @RTS
-@INDBON 
-	LDA S_PLAYER ;only for 3P game
-	CMP #$03
-	BNE @RTS
-	LDA V_PARTY ;only for 3rd player
-	CMP #$02
-	BNE @RTS
-	
-	;ISSUE BONUS + 2 FOR IND
-	LDA #$02
-	CLC
-	ADC V_IBONUS
+	LDA V_IBONUS
+	BPL @MINCAP
+	LDA #00
+@MINCAP
 	STA V_IBONUS
 	
-@RTS
 	LDY FARG1
 	LDA #EV_ISSUE
 	JSR _EVENTON
@@ -438,34 +450,52 @@ _CISSUEB
 	ASL V_IBONUS
 @DOUBLE
 	LDA V_IBONUS
+	LSR
 	JSR _CPADD
 	
 	RTS 
 @LOOP 
 	LDA C_ISSUES,Y
-	CMP (IS_ADDR),Y
-	BNE @PLUS3
-	LDA #$03
+	CMP #08
+	BEQ @ISSUEX
+	CMP #09
+	BEQ @ISSUEN
+
+	LDA (IS_ADDR),Y
+	SEC
+	SBC C_ISSUES,Y
+	BPL @NEG
+	JSR _NEGATIV
+@NEG
+	CMP #03
+	BCS @ZERO
+	CMP #00
+	BEQ @BEST
+	CMP #01
+	BEQ @MID
+@LOW
+	LDA #01
+	BNE @STA
+@MID
+	LDA #02
+	BNE @STA
+@BEST
+	LDA #04
+	BNE @STA
+@ZERO
+	LDA #00
+	BEQ @STA
+@ISSUEX
+	LDA #$02
+	JMP @STA
+@ISSUEN
+	LDA #$FF
+	JMP @STA
+@STA
 	CLC
 	ADC V_IBONUS
 	STA V_IBONUS
-	BNE @TOP
-@PLUS3 
-	TAX 
-	DEX 
-	TXA 
-	CMP (IS_ADDR),Y
-	BNE @OFFBY1L
-@ADD1 
-	INC V_IBONUS
-	BNE @TOP
-@OFFBY1L 
-	INX 
-	INX 
-	TXA 
-	CMP (IS_ADDR),Y
-	BNE @TOP
-	BEQ @ADD1
+	JMP @TOP
 
 ;add_cp_to_cost(A=amt) 
 ;adds CP to the returned CP value
@@ -517,9 +547,6 @@ _NEGATIV
 _DRWPOLL 
 	STX FARG5
 	JSR _CLRBL
-	INC V_WEEK
-	JSR _OFFSHIS
-	DEC V_WEEK
 
 	LDA #P_POLLR
 	STA GX_CROW
@@ -539,38 +566,17 @@ _DRWPOLL
 	JSR _GX_CHAR
 	INC FVAR3
 	JSR _GXINCRW
-;INC GX_CCOL ;space
 	LDA FVAR3
 
 	CMP S_PLAYER ;loop per player
-	BCC @PNLOOP
-	CMP #UND_OFFS
-	BEQ @PNDONE
-
-	LDA #UND_OFFS
-	STA FVAR3
-	DEC FVAR3
-	LDA S_DRWUND
-	BEQ @PNDONE ;if draw und off, ignore
-	JMP @PNLOOP ;if on, add UND
-
-
-@PNDONE 
-;JSR _GXINCRW
+	BNE @PNLOOP
+	
 	LDX FARG5
-	LDA D_REGLIM,X
-	STA FVAR3
-	DEX 
-	LDA D_REGLIM,X
+	JSR _LREGLIM
+	LDA LOWSTATE
 	STA FSTATE
-	STA FARG1
 	JSR _CPOFFS
-	
-	LDX FARG5
-	INC V_POLL-1,X
-	LDA V_POLL-1,X
-	STA V_POLDIV
-	
+
 	LDA #P_POLLC2
 	STA GX_LX1
 @LOOP 
@@ -587,29 +593,18 @@ _DRWPOLL
 	JSR _GXINCRW
 	LDA GX_LX1
 	STA GX_CCOL
-	
-	LDY FSTATE
-	LDA #EV_COMMS
-	JSR _EVENTON
-	BEQ @PLDONE
-	
-	JSR _POPSUMR
-	JSR _STATSUM ;get this start-of-week CP, not last week's
-	
-	LDX FSTATE
-	LDA V_CTRL,X
-	CMP #UND_PRTY
-	BNE @NOMOE
-	JSR _POLLOBF
-@NOMOE
+
+	LDA #00
+	STA V_MARGIN
+	JSR _PCTRL
+	;ignore output; just need the fixed percentages
 	LDA #00
 	STA FVAR1 ;party count
 @PLAYLOOP 
-	LDA FVAR1
-	ASL 
-	TAY 
-
-	JSR _PERCSTA
+	LDX FVAR1
+	JSR _LDAFPERC
+	JSR _PERCTRUNC
+	
 	LDX FVAR1
 	LDA V_PTCOL,X
 	STA GX_DCOL
@@ -619,7 +614,6 @@ _DRWPOLL
 	+__LAB2XY V_FPOINT
 	JSR _GX_STR
 	JSR _GXINCRW
-;INC GX_CCOL
 	LDA GX_LX1
 	STA GX_CCOL
 
@@ -627,16 +621,6 @@ _DRWPOLL
 	LDA FVAR1
 	CMP S_PLAYER ;loop per player
 	BCC @PLAYLOOP
-	CMP #UND_OFFS
-	BEQ @PLDONE
-	LDA #UND_OFFS
-
-
-	STA FVAR1
-	DEC FVAR1
-	LDA S_DRWUND
-	BEQ @PLDONE ;if draw und off, ignore
-	JMP @PLAYLOOP ;if on, add UND
 @PLDONE 
 	JSR _GXINCRW
 
@@ -648,7 +632,7 @@ _DRWPOLL
 	JSR _CPOFFI
 	INC FSTATE
 	LDA FSTATE
-	CMP FVAR3
+	CMP HIGHSTATE
 	BEQ @DONE
 	JMP @LOOP
 @DONE 
@@ -659,134 +643,156 @@ _DRWPOLL
 ;save_history() 
 _SAVEHIS 
 	JSR _CPOFFR
-	LDA #$01
-	STA FSTATE
 
-	LDA #>V_HIST
-	CLC 
-	ADC V_WEEK
-	STA OFFSET+1
-	LDA #01
-	STA OFFSET
-
+	JSR _HSOFFS
+@LOOP
 	LDY #00
-@LOOP 
-	LDX #01
+	LDX #00
 @CLOOP 
-	STY FY1
-	TXA 
-	TAY 
 	LDA (CP_ADDR),Y
-	LDY FY1
-	STA (OFFSET),Y
-	INX 
+	STA (HS_ADDR),Y
 	INY 
-	CPX #UND_OF1M
+	CPY #CPBLEAN
 	BNE @CLOOP
-
-	INC FSTATE
+	
+	LDX #CPBLEAN
+@PACKSL
+	STY FY1
+	TXA
+	TAY
+	LDA (CP_ADDR),Y
+	STA V_NIBBLE+0
+	INY
+	LDA (CP_ADDR),Y
+	STA V_NIBBLE+1
+	JSR _NIBBLE
+	LDY FY1
+	STA (HS_ADDR),Y
+	INY
+	INX
+	INX
+	CPX #CPBLOCK
+	BNE @PACKSL
+	
+	LDX FSTATE
+	LDA V_NEGLECT,X
+	STA (HS_ADDR),Y
+	
+	JSR _HSOFFI
 	JSR _CPOFFI
-	LDA FSTATE
-	CMP #STATE_C
+
 	BNE @LOOP
 	RTS 
 
 ;tiebreaker() 
-;determines who wins control for a CP tie: 1: ISSUE BONUS -> 2: STATE LEAN -> 3: WON POPULAR VOTE -> 4: COIN FLIP
+;determines who wins control for a tie:
+;1: STATE LEAN -> 2: HQ COUNT -> 3: ISSUE BONUS -> 4: WON POPULAR VOTE -> 5: COIN FLIP
 ;POPSUM, CP_ADDR, IS_ADDR set beforehand
-;returns A = party index, FRET2 = tie value
+;returns A = party index, FRET3 = tie value
 ;LOCAL: FVAR1-2,FRET1+3,FX1
-
 _TIE 
 	JSR _MAXPL
 	STX FVAR2 ;number of tied parties
 	JSR _MAXR
 
 	LDA #00
-	STA FVAR1 ;tied parties index
+	STA FRET3
+@TIELOOP
+	LDA #00
+	STA V_MAXPLI
+	JSR _MAXR
+	
+	LDA FRET3
+	+__LAB2XY D_TIES
+	JSR _TABLJSR
+
+	BNE @WINNER
+	INC FRET3
+	JMP @TIELOOP
+@WINNER
+	TAX 
+	DEX
+	LDA V_MAXPL,X
+	INC FRET3
+	RTS 
+;returns index of V_MAXPL with highest SL
+_TIESL
+@TIE2 
+	LDX V_MAXPLI
+	LDA V_MAXPL,X
+	CLC 
+	ADC #CPBLEAN
+	TAY 
+	LDX V_MAXPLI
+	LDA (CP_ADDR),Y
+	STA V_MAX1B,X
+
+	INC V_MAXPLI
+	LDA V_MAXPLI
+	CMP FVAR2
+	BNE @TIE2
+	JSR _MAX2B
+	RTS
+;..
+_TIEISSUE
 @TIE1 
-	LDX FVAR1
+	LDX V_MAXPLI
 	LDA V_MAXPL,X
 	JSR _CANDLOAD
 	LDA #00
 	STA FRET1
 	JSR _CISSUEB
-	LDX FVAR1
-	TXA 
-	ASL 
-	TAX 
+	LDX V_MAXPLI 
 	LDA FRET1
-	STA V_MAX,X
+	STA V_MAX1B,X
 
-	INC FVAR1
-	LDA FVAR1
+	INC V_MAXPLI
+	LDA V_MAXPLI
 	CMP FVAR2
 	BNE @TIE1
-
-	LDA #$01
-	STA FRET3
-	JSR _MAX2
-	BEQ @GOTOT2
-	JMP _TIE2
-@GOTOT2 
-	LDA #00
-	STA FVAR1
-@TIE2 
-	LDX FVAR1
+	JSR _MAX2B
+	RTS
+_TIEHQ
+@LOOP
+	LDX V_MAXPLI
 	LDA V_MAXPL,X
-	CLC 
-	ADC #UND_OF1M
-	TAY 
-	LDA FVAR1
-	ASL 
-	TAX 
-	LDA (CP_ADDR),Y
-	STA V_MAX,X
-
-	INC FVAR1
-	LDA FVAR1
+	TAX
+	LDY CPSTATE
+	JSR _LDAHQ
+	LDX V_MAXPLI
+	STA V_MAX1B,X
+	INC V_MAXPLI
+	LDA V_MAXPLI
 	CMP FVAR2
-	BNE @TIE2
-
-	LDA #$02
-	STA FRET3
-	JSR _MAX2
-	BEQ @GOTOT3
-	JMP _TIE2
-@GOTOT3 
-	LDA #$03
-	STA FRET3
-	
-	LDA #00
-	STA FVAR1
+	BNE @LOOP
+	JSR _MAX2B
+	RTS
+_TIEPOP
 @TIE3
-	LDX FVAR1
+	LDX V_MAXPLI
 	LDA V_MAXPL,X
+	CLC
+	ADC #$01
 	CMP V_POPWIN
 	BEQ @MATCH
-	INC FVAR1
-	LDA FVAR1
+	
+	INC V_MAXPLI
+	LDA V_MAXPLI
 	CMP FVAR2
-	BNE @TIE1
-	BEQ @GOTOT4
+	BNE @TIE3
+	LDA #00
+	RTS
 @MATCH
-	JMP _TIE2
-@GOTOT4 
-
-	LDA #$04
-	STA FRET3
+	LDX V_MAXPLI
+	INX
+	TXA
+	RTS
+_TIECOIN
 	LDA FVAR2
 	JSR _RNG
 	CLC 
 	ADC #$01
-	JMP _TIE2
-;return SR
-_TIE2 
-	TAX 
-	DEX
-	LDA V_MAXPL,X
-	RTS 
-
+	RTS
 ;calc_win() 
 ;determines who won and by what tie level: 1->EC PLURALITY; 2->WON POPULAR VOTE; 3->LMIN; 4->COIN FLIP
 ;FRET1 = winning party index + 1
@@ -810,12 +816,14 @@ _CALCWIN
 	LDX #00
 @LOOP2
 	LDA V_MAXPL,X
+	CLC
+	ADC #$01
 	CMP V_POPWIN
 	BEQ @MOSTPOP
 	INX
 	CPX FAI
 	BNE @LOOP2
-	
+	BEQ @TIE2
 @MOSTPOP
 	STA FRET1
 	LDA #01
@@ -845,13 +853,7 @@ _CALCWIN
 @TIE3 
 	LDX #00
 @PLLOOP 
-; LDA V_MAXPL,X
-; BEQ @PLDONE
-; INX
-; CPX FAI
-; BNE @PLLOOP
 @PLDONE 
-; TXA
 	LDA FAI
 	JSR _RNG
 	TAX 
@@ -885,243 +887,12 @@ _CALCWIN2
 	INX 
 	CPX S_PLAYER
 
-
 	BNE @LOOP
 	RTS 
-
-;calculate_revert_lean() 
-;adds CP to unvisited states
-_CALCREV 
-	LDX #01
-	STX FSTATE
-@LOOP 
-	LDX FSTATE
-	LDA V_REVERT,X
-	BEQ @SKIP
-	STA FVAR3
-
-	STX FARG1
-	JSR _CPOFFS
-@CUMUL 
-	LDY #00
-	STY FVAR2
-@LOOP2 
-	LDY FVAR2
-	STY V_PARTY
-	TYA 
-	CLC 
-	ADC #UND_OF1M
-	TAY 
-	LDA (CP_ADDR),Y
-	STA FRET1
-	JSR _ADDCPUN
-	INC FVAR2
-	LDA FVAR2
-	CMP S_PLAYER
-	BNE @LOOP2
-
-@SKIP 
-	INC FSTATE
-	LDA FSTATE
-	CMP #STATE_C
-	BNE @LOOP
-
-	LDX #01
-@LOOP3 
-	INC V_REVERT,X
-	INX 
-	CPX #STATE_C
-	BNE @LOOP3
-
-	LDA #00
-	STA V_PARTY
-	RTS 
-
-;save_undecided_cp() 
-;saves UND CP value; used for simultaneous calculations
-;i.e. UND CP is the same for all candidates during a week
-;instead of being executed in party order
-_SAVEUND 
-	LDA #$01
-
-
-	STA FARG1
-	STA FSTATE
-	JSR _CPOFFS
-@LOOP 
-	LDY #UND_OFFS
-	LDA (CP_ADDR),Y
-	LDX FSTATE
-	STA V_UNDCP,X
-
-	JSR _CPOFFI
-	INC FSTATE
-	LDA FSTATE
-	CMP #STATE_C
-	BNE @LOOP
-
-	RTS 
-
-;average_region_state_lean(V_PARTY = desired party)
-_REGLEAN
-
-	LDA #$01
-	STA FARG1
-	STA FSTATE
-	JSR _CPOFFS
-@STLOOP
-	LDA V_PARTY
-	CLC
-	ADC #UND_OF1M
-	TAY
-	LDA (CP_ADDR),Y
-	LDX FSTATE
-	STA V_CTRL,X ;temp use
-	
-	INC FSTATE
-	JSR _CPOFFI
-	LDA FSTATE
-	CMP #STATE_C
-	BNE @STLOOP
-
-	LDA #$01
-	STA FVAR1 ;region
-@REGLOOP
-	LDX FVAR1
-	LDA D_REGLIM-1,X
-	STA FVAR5 ;lower limit
-	LDA D_REGLIM,X
-	STA FVAR6 ;upper limit
-	
-	LDX FVAR5
-	LDY #00
-@INREGION	
-	LDA V_CTRL,X
-	STA V_AISTAT,Y
-	INY
-	INX
-	CPX FVAR6
-	BNE @INREGION
-	
-	+__LAB2O V_AIH2REG-1
-	LDX V_PARTY
-	LDY #$09
-	JSR _OFFSET
-	
-	LDX FVAR1
-	LDA D_REGC-1,X
-	STA FARG1
-	JSR _AVGVAL
-	LDY FVAR1
-	STA (OFFSET),Y
-	
-	INC FVAR1
-	LDA FVAR1
-	CMP #$0A
-	BNE @REGLOOP
-	RTS
-
-;we already have state control values, so we know which states are outside MoE. Those numbers remain unaltered. Those that AREN'T must have their state sums modified, but not in excess of the MoE. Since we know that the difference between the top two parties is always less than MoE, Therefore, it makes sense to 1) decrease the largest party's count by [0,-MoE/2 + 1] to a minimum of 1, 2) increase all other parties by [0,MoE/2 - 1] to a maximum of 255, where MoE is (total CP * MoE).
-;poll_obfuscate()
-_POLLOBF
-	;do MoE / 100
-	LDA #$00
-	LDY V_MOE
-	JSR _162FAC
-	JSR _FDIV10
-	JSR _FDIV10
-	JSR _FAC2ARG
-	;multiply MoE by STATSUM total
-	LDA #$00
-	LDY V_POPSUM+10
-	JSR _162FAC
-	JSR _FMULTT
-	;convert back to hex
-	LDA #00 ;no negatives!
-	STA $A2
-	STA $AA
-	JSR _FAC232 ;float FAC to 32bit
-	;generate [party] random amounts
-	LDX S_PLAYER
-@RANDOM
-	DEX
-	LDA FAC+4
-	LSR
-	;halve MoE [# of times region has been POLLed - 1]
-	LDY V_POLDIV
-	DEY
-@HALVING
-	CPY #00
-	BEQ @DONEHALF
-	LSR
-	DEY
-	JMP @HALVING
-@DONEHALF
-	CMP #$02
-	BCC @ZERO
-	JSR _RNG
-@ZERO
-	STA FAC,X
-	CPX #$00
-	BNE @RANDOM
-	;add/subtract to STATSUM values
-	JSR _MARGMAX ;get highest party
-	CMP #$00
-	BEQ @TIE
-	
-	TAX
-	DEX
-	LDA FAC,X
-	JSR _NEGATIV ;set only highest to negative
-	STA FAC,X
-	JMP @ADD
-@TIE
-	LDX #00 ;set random parties to negative
-@TIELOOP 
-	LDA #$02
-	JSR _RNG
-	BNE @FLIP
-	LDA FAC,X
-	JSR _NEGATIV
-	STA FAC,X
-@FLIP
-	INX
-	CPX S_PLAYER
-	BNE @TIELOOP
-@ADD
-	LDX #00
-	LDY #00
-	STX V_POPSUM+10
-	STX V_POPSUM+11 ;reset total and re-sum
-@ADDLOOP	
-	LDA V_POPSUM,Y
-	STA FSUS2
-	LDA FAC,X
-	STY FY1
-	JSR _ADDSUS
-	LDY FY1
-	LDA FSUS1
-	STA V_POPSUM,Y
-	CLC
-	ADC V_POPSUM+10
-	STA V_POPSUM+10
-	BCC @CARRY
-	INC V_POPSUM+11
-@CARRY
-	
-	INX
-	INY
-	INY
-	CPX S_PLAYER
-	BNE @ADDLOOP
-	
-	RTS
 
 ;returns the party with the most EC
 _MAXEC
-	LDA #STATE_C
-	STA FARG5
-	JSR _SUMEC
+	JSR _SUMEC2
 	JSR _MAXR
 	LDX #00
 @LOOP1 
@@ -1135,96 +906,104 @@ _MAXEC
 
 ;popular_vote_sum(FARG5 = state count)
 ;awards ((EC-2) * state percent) for each state to each party
+;calculates and stores total popular vote per party
 _POPSUM2
 	LDA #00
 	LDX #00
 @CLEAR
-	STA V_POPULAR,X
+	STA V_CPFLOAT,X
 	INX
-	CPX #26
+	CPX #FLOATLEN*5
 	BNE @CLEAR
 
 	LDA #$01
-	STA FARG1
 	STA FSTATE
 	JSR _CPOFFS
+	
 @STATELP
-	JSR _POPSUMR
-	JSR _STATSUM
-
+	LDA #$00
+	STA V_MARGIN
+	STA V_RANDCP
+	JSR _PCTRL
+	
 	LDA #00
-	STA V_PARTY
+	STA FPARTY
 @PARTYLP
-	LDA V_PARTY
-	ASL
-	TAY
-	JSR _PERCSTA2 ;move popsum to percentage arguments
-	JSR _PERCEN2 ;calculate percentage to FAC (do not convert to string)
+	LDX FPARTY
+	JSR _LDAFPERC
 	JSR _FAC2ARG
 	LDX FSTATE
 	LDA V_EC,X
+	CMP #$02 ;if EC < 2, ignore
+	BCC @TOOSMALL
 	SEC
 	SBC #$02
 	TAY
 	LDA #00
 	JSR _162FAC ;EC - 2 to FAC
-	JSR _FMULTT ;percentage * (EC - 2)
-	
-	LDY V_PARTY
-	JSR _POP2OFF
+	JSR _MULTIPLY ;percentage * (EC - 2)
+
+	LDY FPARTY
+	JSR _FLT2OFF
 	LDY OFFSET+1
 	LDA OFFSET
-	JSR _FADD ;add to sum
+	JSR _MEM2ARG
+	JSR _FADDFLAG ;add to sum
+@TOOSMALL
 	LDY OFFSET+1
 	LDX OFFSET
 	JSR _MOVMF ;move new sum back
-	
-	INC V_PARTY
-	LDA V_PARTY
+
+	INC FPARTY
+	LDA FPARTY
 	CMP S_PLAYER
-	BCC @PARTYLP
-	
-	LDA S_SUMUND
-	BEQ @DONEPT
-	
-	LDA V_PARTY
-	CMP #UND_PRTY+1
-	BEQ @DONEPT
-	
-	LDA #UND_PRTY
-	STA V_PARTY
 	BNE @PARTYLP
 	
-@DONEPT
 	JSR _CPOFFI
 	INC FSTATE
 	LDA FSTATE
 	CMP FARG5
 	BNE @STATELP
-	
+
 	LDA #00
-	STA V_PARTY
+	STA FARG1
+@PLAYLOOP
+	JSR _POPSUMPT
+	JSR _STRPERC
+	+__LAB2O V_POPVOTE
+	LDX FARG1
+	LDY #PERCLEN
+	JSR _OFFSET
+	LDY #00
+@COPY
+	LDA V_FPOINT,Y
+	STA (OFFSET),Y
+	INY
+	CPY #PERCLEN
+	BNE @COPY
+	INC FARG1
+	LDA FARG1
+	CMP S_PLAYER
+	BNE @PLAYLOOP
+
 	RTS
 
 ;popular_percentage_by_party(FARG1 = party index)
 ;finds the percentage of the total popular vote for one party
 ;LOCAL: FVAR6
-_POPSUM2P	
+_POPSUMPT
 	LDY FARG1
-	JSR _POP2OFF
+	JSR _FLT2OFF
 	LDY OFFSET+1
 	LDA OFFSET
 	JSR _MOVFM
 	JSR _FAC2F3
 	
-	LDA S_SUMUND
-	BEQ @SUM
 	LDY #$B4
 	LDA #$01 ;436
 	JSR _162FAC
-	JMP @DIV
-@SUM ;sum all popular vote float values
-	+__LAB2O V_POPULAR
+;sum all popular vote float values
+	+__LAB2O V_CPFLOAT
 	LDY OFFSET+1
 	LDA OFFSET
 	JSR _MOVFM
@@ -1237,7 +1016,8 @@ _POPSUM2P
 	JSR _OFFSET
 	LDY OFFSET+1
 	LDA OFFSET
-	JSR _FADD
+	JSR _MEM2ARG
+	JSR _FADDFLAG
 	
 	INC FVAR6
 	LDA FVAR6
@@ -1246,29 +1026,24 @@ _POPSUM2P
 @DIV
 	JSR _F32ARG
 	JSR _DIVIDE
-	JSR _FAC2STR
-	;JSR _PERCFMT
 	RTS
 	
 ;state_cp_sum() 
 ;sums all candidates' CP at current CP_ADDR/HS_ADDR
-;if draw_und is set, adds UND to total as well
 ;adds result to V_POPSUM; for single-use, clear first
 _STATSUM 
-	LDY #01
-@LOOP 
+	LDY #00
+@LOOP
 	JSR _STATSM2
 	CLC 
 	ADC V_POPSUM+10
 	STA V_POPSUM+10
 	BCC @NOC
 	INC V_POPSUM+11
-@NOC 
-	DEY 
-	TYA 
+@NOC
+	TYA
 	ASL 
 	TAX 
-	INY 
 	JSR _STATSM2
 	CLC 
 	ADC V_POPSUM,X
@@ -1277,15 +1052,8 @@ _STATSUM
 	INC V_POPSUM+1,X
 @NOC2 
 	INY 
-	CPY S_PLAY1M ;loop per player
-	BCC @LOOP
-	CPY #UND_OF1M
-	BEQ @RTS
-
-	LDY #UND_OFFS
-	LDA S_SUMUND
-	BEQ @RTS ;if draw und off, ignore
-	JMP @LOOP ;if on, add UND
+	CPY S_PLAYER ;loop per player
+	BNE @LOOP
 @RTS 
 	RTS 
 ;sum from history check
@@ -1298,13 +1066,8 @@ _STATSM2
 	LDA (CP_ADDR),Y
 	RTS 
 
-;percent_state(Y = party index * 2)
-;divides state CP by total, formats
-_PERCSTA 
-	JSR _PERCSTA2
-	JSR _PERCENT
-	RTS 
-_PERCSTA2
+;popsum_to_args
+_POPSUM2ARGS
 	LDA V_POPSUM,Y
 	STA FARG1
 	LDA V_POPSUM+1,Y
@@ -1337,9 +1100,12 @@ _CTRLCNT
 	BNE @LOOP
 	RTS 
 
-;popsum_draw_combo() 
-_POPCOM1
-	JSR _POPSUM2
+;popsum_draw_combo_1() 
+_POPCMB1
+	LDA V_PARTY
+	BNE @SKIP
+	JSR _POPSUM2 ;only ever done at the start of a WEEK
+@SKIP
 	LDA S_SKIPGAME
 	BNE @RTS
 	LDA #STATE_C
@@ -1347,6 +1113,14 @@ _POPCOM1
 	JSR _DRWPOP
 @RTS
 	RTS 
+	
+;popsum_draw_combo_2()
+;POPCMB1 for all states
+_POPCMB2
+	LDA #STATE_C
+	STA FARG5
+	JSR _POPCMB1
+	RTS
 	
 ;candidate_display_loop() 
 ;shows all candidates
@@ -1374,26 +1148,6 @@ _POPSUMR
 	BNE @LOOPCLR
 	RTS 
 
-;popular_vote_sum() 
-;draw_und set beforehand
-;sums ALL state cp by party, returns to v_popsum
-_POPSUM 
-	LDA #00
-	STA HS_ADDR
-	LDA #$01
-	STA FSTATE
-	JSR _CPOFFR
-@STLOOP
-
-	JSR _STATSUM
-	JSR _CPOFFI
-	INC FSTATE
-	LDA FSTATE
-	CMP #STATE_C
-	BNE @STLOOP
-	RTS 
-
-
 ;max2nd() 
 ;max2() but instead gets the second highest value
 ;only guaranteed a second value, not a second party
@@ -1406,24 +1160,42 @@ _MAX2ND
 	TAY 
 	DEY 
 	DEY 
+	LDA V_MAX,Y
+	STA V_MAXHOLD
+	LDA V_MAX+1,Y
+	STA V_MAXHOLD+1
+	TYA
+	STA V_MAXHOLD+2
+	
 	LDA #$00
 	STA V_MAX,Y
 	STA V_MAX+1,Y
 	JSR _MAX2
-@TIE 
+	
+	PHA
+	LDY V_MAXHOLD+2
+	LDA V_MAXHOLD
+	STA V_MAX,Y
+	LDA V_MAXHOLD+1
+	STA V_MAX+1,Y
+	PLA
+@TIE
 	RTS 
 
 ;max2() 
 ;2B maximum where values are (L)(H) pairs in V_MAX
-;LOCAL: FRET1-2
-;returns to MAXLOW/MAXHIGH; if not tie, A = index
-_MAX2 
+;returns to MAXLOW/MAXHIGH; if not tie, A = index + 1, otherwise A = 0
+_MAX2
+	LDA #00
+	STA MAXLOW
+	STA MAXHIGH
+	
 	LDX #01
 	JSR _MAXA
 	LDX #01
 	JSR _MAXB
 	PHA 
-	LDA FRET1
+	LDA MAXVAR2
 	STA MAXHIGH
 	PLA 
 	BNE @NOTTIE
@@ -1432,25 +1204,28 @@ _MAX2
 	LDX #00
 	JSR _MAXB
 	PHA 
-	LDA FRET1
+	LDA MAXVAR2
 	STA MAXLOW
 	PLA 
-@NOTTIE 
+@NOTTIE
 	RTS 
+_MAX2B
+	JSR _MAX1B
+	JSR _MAX2
+	RTS
 
 ;max_a(x = V_MAX offset)
-;FRET1 = maximum value
-;put maximum value in FRET1
+;puts maximum value in MAXVAR2
 _MAXA 
 	LDY #$01
 	LDA #00
-	STA FRET1
-	STA FRET2
+	STA MAXVAR2
+	STA MAXVAR3
 @LOOP 
 	LDA V_MAX,X
-	CMP FRET1
+	CMP MAXVAR2
 	BCC @SKIPSTA
-	STA FRET1
+	STA MAXVAR2
 @SKIPSTA 
 	INX 
 	INX 
@@ -1460,19 +1235,17 @@ _MAXA
 
 	RTS 
 
-
 ;max_b(X = V_MAX offset)
 ;returns A = index + 1 (0 for tie)
-_MAXB 
-
+_MAXB
 	LDY #01
 @RLOOP 
 	LDA V_MAX,X
-	CMP FRET1
+	CMP MAXVAR2
 	BNE @SKIP
-	LDA FRET2
+	LDA MAXVAR3
 	BNE @TIE
-	STY FRET2
+	STY MAXVAR3
 @SKIP 
 	INX 
 	INX 
@@ -1480,41 +1253,59 @@ _MAXB
 	CPY S_PLAY1M
 	BNE @RLOOP
 
-	LDA FRET2
+	LDA MAXVAR3
 	RTS 
 @TIE 
 	LDA #00
 	RTS 
 
+;max_c()
+;returns to V_MAXPL the indices in V_MAX holding MAXLOW/MAXHIGH
+;X/MAXVAR1 = number of tied parties
+_MAXC
+	LDA #00
+	TAX
+	TAY
+@CLRLOOP
+	STA V_MAXPL,X
+	INX
+	CPX #PLAYERMAX
+	BNE @CLRLOOP
+	TAX
+	STA MAXVAR1 ;index for V_MAXPL
+	
+@LOOP	
+	LDA V_MAX,Y
+	CMP MAXLOW
+	BNE @SKIP
+	LDA V_MAX+1,Y
+	CMP MAXHIGH
+	BNE @SKIP
+	;equal
+	TXA
+	PHA
+	LDX MAXVAR1
+	STA V_MAXPL,X
+	INC MAXVAR1
+	PLA
+	TAX
+@SKIP
+	INY
+	INY
+	INX
+	CPX #PLAYERMAX
+	BNE @LOOP
+	LDX MAXVAR1
+	RTS
+
 ;max_reset() 
 _MAXR 
-	LDX #00
 	LDA #00
+	TAX
 @LOOP 
 	STA V_MAX,X
 	INX 
 	CPX #$08
-	BNE @LOOP
-	RTS 
-
-;und_setup() 
-_UNDCP 
-	JSR _CPOFFR
-	LDA #01
-	STA FSTATE
-@LOOP 
-	LDX FSTATE
-	LDA #147
-	CLC 
-	ADC V_EC,X
-	ADC V_EC,X
-	;255 - (54 - EC);2 = 147 + EC;2
-	LDY #UND_OFFS
-	STA (CP_ADDR),Y
-	JSR _CPOFFI
-	INC FSTATE
-	LDA FSTATE
-	CMP #STATE_C
 	BNE @LOOP
 	RTS 
 	
@@ -1523,11 +1314,9 @@ _UNDCP
 ;does NOT set party control -- use _STCTRL or _FINALCP
 _MAPCOL 
 	JSR _CPOFFR
-	LDA #01
-	STA FSTATE
 @LOOP 
-	LDX FSTATE
-	LDA V_CTRL,X
+	LDX CPSTATE
+	JSR _LDACTRL
 	TAY 
 	LDA V_PTCOL,Y
 	STA V_STCOL,X
@@ -1540,9 +1329,6 @@ _MAPCOL
 @SKIPMSK 
 
 	JSR _CPOFFI
-	INC FSTATE
-	LDA FSTATE
-	CMP #STATE_C
 	BNE @LOOP
 	RTS 
 	
@@ -1566,18 +1352,19 @@ _SKIPCHK
 ;clears poll-by-region counts
 _CLRPOLL
 	LDX #$00
+	TXA
 	STX V_POLLCT
 @CLR3
 	STA V_POLL,X
+	STA V_REGISS,X
 	INX
 	CPX #REGION_C
 	BNE @CLR3
 	RTS
 	
-;calculate_popular_vote_winner()
-;POPSUM called beforehand
-;stores winning party index + 1 to V_POPWIN
-_POPWIN
+;calculate_float_max(floats in V_CPFLOAT)
+;stores winning party index + 1 to V_FLOATMAX
+_FLOATMAX
 	LDA #00
 	STA FVAR1
 	LDA #00
@@ -1585,7 +1372,7 @@ _POPWIN
 	JSR _162FAC ;FAC = 0
 @TIE3 
 	LDY FVAR1
-	JSR _POP2OFF ;V_POPULAR should be loaded
+	JSR _FLT2OFF ;V_POPULAR should be loaded
 	LDA OFFSET
 	LDY OFFSET+1
 	JSR _FCOMP
@@ -1606,7 +1393,7 @@ _POPWIN
 	STA FX1 ;party list index (must be set to an index; if it is set twice, quit)
 @TIE3L2 
 	LDY FVAR1
-	JSR _POP2OFF
+	JSR _FLT2OFF
 	LDA OFFSET
 	LDY OFFSET+1
 	JSR _FCOMP
@@ -1629,5 +1416,726 @@ _POPWIN
 @FALSE
 	LDA #00
 @RTS
-	STA V_POPWIN
+	STA V_FLOATMAX
 	RTS
+	
+;calculate_plurality()
+;calculates (EC / player count) + 1
+_PLURAL
+	LDX #00
+	STX V_PLURAL
+	STX V_PLURAL+1
+@SUMLOOP
+	LDA V_EC,X
+	CLC
+	ADC V_PLURAL
+	STA V_PLURAL
+	BCC @NOCARRY
+	INC V_PLURAL+1
+@NOCARRY
+	INX
+	CPX #STATE_C
+	BNE @SUMLOOP
+	
+	LDA V_PLURAL+1
+	LDY V_PLURAL
+	JSR _162FAC
+	JSR _FAC2ARG
+	LDA #$00
+	LDY S_PLAYER
+	JSR _162FAC
+	JSR _DIVIDE
+	;calculate plurality * 1.5
+	JSR _FAC2F3
+	JSR _FAC2ARG
+	LDX #00
+	TXA
+@CLRFAC
+	STA FAC,X
+	INX 
+	CPX #FLOATLEN
+	BNE @CLRFAC
+	LDA #$81
+	STA FAC
+	LDA #$C0
+	STA FAC+1 ;1.5
+	JSR _MULTIPLY
+	
+	LDX #00
+@COPY
+	LDA FAC,X
+	STA V_PLURALF,X
+	INX
+	CPX #FLOATLEN
+	BNE @COPY
+	LDA V_PLURALF+1
+	AND #%01111111
+	STA V_PLURALF+1
+	;restore FAC
+	JSR _F32FAC
+	JSR _FAC232
+	LDA FAC+3
+	STA V_PLURAL
+	LDA FAC+4
+	STA V_PLURAL+1
+	
+	CLC
+	INC V_PLURAL+1
+	BCC @RTS
+	INC V_PLURAL
+@RTS
+	RTS
+
+;history_week_offset() 
+_HSOFFS 
+	+__LAB2O V_HIST ;(WEEK - 1) * STATE COUNT * HISTORY BLOCK
+	LDX V_WEEK
+	DEX
+	STX FX1
+@ADDLOOP
+	LDX FX1
+	BEQ @ZERO
+	LDX #STATE_C-1
+	LDY #HISTBLOCK
+	JSR _OFFSET
+	LDX V_WEEK
+	DEC FX1
+	JMP @ADDLOOP
+@ZERO
+	LDA OFFSET
+	STA HS_ADDR
+	LDA OFFSET+1
+	STA HS_ADDR+1
+	RTS
+;history_state_offset(X = state index)
+;call after above to set state
+_HSOFFS2
+	LDA HS_ADDR
+	STA OFFSET
+	LDA HS_ADDR+1
+	STA OFFSET+1
+	DEX
+	LDY #HISTBLOCK
+	JSR _OFFSET
+	LDA OFFSET
+	STA HS_ADDR
+	LDA OFFSET+1
+	STA HS_ADDR+1
+	RTS
+;history_address_increment()
+;increments to next state
+_HSOFFI
+	LDA HS_ADDR
+	CLC
+	ADC #HISTBLOCK
+	STA HS_ADDR
+	BCC @SC
+	INC HS_ADDR+1
+@SC
+	RTS
+;history_address_reset()
+;resets history address to WEEK 1's history
+_HSOFFR
+	LDA #<V_HIST
+	STA HS_ADDR
+	LDA #>V_HIST
+	STA HS_ADDR+1
+	RTS
+		
+;attract_mode()
+_ATTRACT
+	LDX #00
+@LOOP1
+	LDA #C_DRED
+	STA V_TITLANIM+1,X
+	LDA #C_WHITE
+	STA V_TITLANIM+2,X
+	LDA #C_BLUE
+	STA V_TITLANIM+3,X
+	INX
+	INX
+	INX
+	CPX #21
+	BNE @LOOP1
+	
+@CYCLE
+	LDA #160
+	JSR _RNG
+	TAX
+	LDA #$04
+	JSR _RNG
+	CLC
+	ADC #ALPHAS
+	STA V_SCREEN+800,X
+	LDA #$0F
+	JSR _RNG
+	CLC
+	ADC #$01
+	STA V_COLRAM+800,X
+	
+	LDX #20
+	
+	LDA V_TITLANIM+20
+	STA FVAR3 ;end
+@LOOP
+	LDA V_TITLANIM-1,X
+	STA V_TITLANIM,X
+
+	DEX
+	CPX #00
+	BNE @LOOP
+	
+	LDA FVAR3
+	STA V_TITLANIM+0
+
+	LDA #STATE_C
+	JSR _RNG
+	STA FSTATE
+@REROLL
+	LDA #$0F
+	JSR _RNG
+	BEQ @REROLL
+	LDX FSTATE
+	STA V_STCOL,X
+	JSR _DRWMAP
+	
+	LDY #00
+	LDX #00
+@WAIT
+	INX
+	BNE @WAIT
+	INY
+	CPY #$30
+	BNE @WAIT
+	
+	JSR _SCNKEY
+	JSR _GETIN
+	CMP #$00
+	BEQ @CYCLE
+	
+	LDA #$00
+	STA FVAR3
+	RTS
+	
+;final_cp_control() 
+;sets final control values, breaks ties
+_FINALCP
+	LDA #00
+	STA V_MOE
+	STA V_POLLON
+	STA V_SUMFH
+	
+	LDA #STATE_C
+	STA FARG5
+	JSR _POPSUM2
+	JSR _FLOATMAX
+	STA V_POPWIN
+	
+	JSR _CPOFFR
+	LDA #$FF
+	STA V_MARGIN
+@SLOOP 
+	JSR _PCTRL
+	CMP #UND_PRTY
+	BNE @SKIPTIE
+	
+	JSR _TIE
+	PHA
+	LDX CPSTATE
+	LDA FRET3
+	STA V_TIERES,X
+	PLA
+@SKIPTIE  
+	LDX CPSTATE
+	STA V_CTRL,X
+
+	JSR _CPOFFI
+	BNE @SLOOP
+	RTS 
+
+	
+;set_negative_flag()
+;sets all floating-point negative flags to OFF
+_POSFLOAT
+	;set sign to positive for both arguments
+	LDA #$00
+	STA ARG+5
+	STA FAC+5
+	LDA #%10000000
+	ORA FAC+1
+	STA FAC+1
+	LDA #%01111111
+	AND ARG+1
+	LDA #%10000000
+	ORA ARG+1
+	STA ARG+1
+	RTS
+	
+;adds 2^(HQ+1) CP to each state for each party
+_HQAPPLY
+	LDA V_PARTY
+	STA FPARTY
+	JSR _CPOFFR
+	+__LAB2O V_HQ
+@STALOOP
+	LDA #00
+	STA V_PARTY
+	LDY CPSTATE
+@PLYLOOP
+	LDX V_PARTY
+	JSR _LDAHQ
+	
+	LDX BITRET
+	INX
+	LDA #01
+@2LOOP
+	ASL
+	DEX
+	BNE @2LOOP
+	STA FRET1
+	JSR _ADDCP
+	
+	INC V_PARTY
+	LDA V_PARTY
+	CMP S_PLAYER
+	BNE @PLYLOOP
+	
+	JSR _CPOFFI
+	BNE @STALOOP
+	
+	LDA FPARTY
+	STA V_PARTY
+	RTS
+	
+;hq_plus(Y = state index)
+;adds an HQ to state index Y for party V_PARTY, to a maximum of 3
+;returns A = successful build
+_HQPLUS
+	LDX V_PARTY
+	JSR _LDAHQ
+	
+	INC BITRET
+	LDA BITRET
+	CMP #$04
+	BEQ @FAIL
+	
+	LDA BITRET
+	STA BITSTA
+	LDX V_PARTY
+	JSR _STA2BIT
+	
+	LDA #01
+	RTS
+@FAIL
+	LDA #00
+	RTS
+
+;hq_minus(Y = state index)
+;removes an HQ to state index Y for party V_PARTY
+_HQMINUS
+	LDX V_PARTY
+	JSR _LDAHQ
+	
+	DEC BITRET
+	LDA BITRET
+	BMI @FAIL
+	
+	LDA BITRET
+	STA BITSTA
+	LDX V_PARTY
+	JSR _STA2BIT
+@FAIL
+	RTS
+
+;load_HQ(X = party index, Y = state index)
+;returns HQ value to BITRET
+_LDAHQ
+	+__LAB2O V_HQ
+	JSR _LDA2BIT
+	RTS
+	
+;HQ_cost()
+_HQCOST
+	LDA C_MONEY
+	SEC
+	SBC #HQ_COST
+	STA C_MONEY
+	RTS
+
+;load_2_bits(X = index (0-3), OFFSET = address, Y = address offset)
+;returns to BITRET
+_LDA2BIT
+	TXA
+	ASL
+	TAX
+	STX FX1
+	JSR _LDABIT
+	STA BITRET
+	LDX FX1
+	INX
+	JSR _LDABIT
+	ASL
+	ORA BITRET
+	STA BITRET
+	RTS
+	
+;store_2_bits(X = index (0-3), OFFSET = address, Y = address offset, BITSTA = input)
+_STA2BIT
+	TXA
+	ASL
+	TAX
+	STX FX1
+	LDA BITSTA
+	AND #%00000001
+	JSR _STABIT
+	LDX FX1
+	INX
+	LDA BITSTA
+	AND #%00000010
+	JSR _STABIT
+	RTS
+	
+;results() 
+;goes over regions one at a time
+;LOCAL: FVAR4
+_RESULTS
+	JSR _GX_CLRS
+	JSR _FILMASK
+	JSR _MAPCOL
+	JSR _MAPCMB1
+
+	LDA #$01
+	STA C_CREG ;region counter
+@REGLOOP 
+	JSR _CLRMENR
+	LDX C_CREG
+	JSR _LREGLIM
+	LDY LOWSTATE
+	LDA HIGHSTATE
+	STA FARG5
+	LDA #00
+@CLRLOOP 
+	STA V_COLMSK,Y ;clear mask
+	INY 
+	CPY HIGHSTATE
+	BNE @CLRLOOP
+
+	JSR _MAPCOL
+	JSR _MAPCMB1
+	LDA C_CREG
+	JSR _DRWREGS
+	JSR _DRWWIN
+	JSR _POPSUM2
+	JSR _SUMEC
+	JSR _DRWPOP2
+	LDX C_CREG
+	LDA #00
+	STA V_SUMFH
+	JSR _DRWPOLL
+
+	INC C_CREG
+	LDA C_CREG
+	CMP #REGION_C+1
+	BNE @REGLOOP
+
+	RTS 
+	
+_ISSUES 
+	+__LAB2A2 V_ISSUE,D_ISSUE
+	LDA #00
+	STA FVAR3 ;compressed 1
+	STA FVAR4 ;..2
+	STA FVAR5 ;..3
+	STA FARG5
+
+@TOP 
+	JSR _ISSUES2
+
+	LDA FARG1
+	CLC 
+	ADC #$08
+	STA FARG1
+	BCC @CARRY
+	INC FARG2
+
+@CARRY 
+	LDA FARG3
+	CLC 
+	ADC #$03
+	STA FARG3
+	BCC @CARRY2
+	INC FARG4
+@CARRY2 
+	INC FARG5
+	LDA FARG5
+	CMP #STATE_C
+	BNE @TOP
+	RTS 
+;3-hex decompress (A=VAL,first bit in arg5)
+_ISSUES2 
+	LDY #00
+@3LOOP 
+	LDA (FARG3),Y
+	STA FVAR3,Y
+	INY 
+	CPY #$03
+	BNE @3LOOP
+
+	LDY #$08
+@8LOOP 
+	LDX #$03
+	LDA #00
+@RLOOP 
+	ROR FVAR3
+	ROR FVAR3+1
+	ROR FVAR3+2
+	ROR 
+	DEX 
+	BNE @RLOOP
+
+	LDX #05
+@VALOOP LSR
+	DEX 
+	BNE @VALOOP
+
+	DEY 
+	STA (FARG1),Y
+	TYA 
+	BNE @8LOOP
+	RTS 
+
+;load_control(X = state index)
+_LDACTRL
+	LDA V_POLLON
+	BEQ @CTRL
+	LDA V_POLLMAP,X
+	RTS
+@CTRL
+	LDA V_CTRL,X
+	RTS
+
+;draw_settings_update()
+;toggles setting +/-
+_DRWSETG
+	+__COORD P_SETTR+2,P_RIGHT-1
+	LDA #$01
+	STA FVAR1 ;option count
+@LOOP
+	LDX FVAR1
+	LDA V_FLOAT3,X
+	JSR _DRWSIGN
+	DEC GX_CCOL
+	INC GX_CROW
+	INC FVAR1
+	LDA FVAR1
+	CMP #SETTINGC
+	BNE @LOOP
+	RTS
+	
+;3p_party_select()
+_3PPARTY
+	LDA S_PLAYER
+	CMP #$03
+	BNE @RTS
+@FTC
+	JSR _CLRBR
+
+	+__COORD P_CONVNR,P_CONVNC
+	+__LAB2XY T_3PARTY
+	JSR _GX_STR
+	
+	+__COORD P_NOYESR,P_NOYESC-1
+	LDX #$05
+	JSR _3PPARTY2
+	+__COORD P_NOYESR+1,P_NOYESC-1
+	LDX #$06
+	JSR _3PPARTY2
+	
+	LDX #P_NOYESR
+	LDY #P_NOYESR+1
+	JSR _RSELECT
+	STA S_3PMODE
+	JSR _FTC
+	BNE @FTC
+@RTS
+	RTS
+;X = party name index
+_3PPARTY2
+	LDA D_PTCOL2,X
+	STA GX_DCOL
+	+__LAB2O D_PARTY
+	LDY #11
+	JSR _OFFSET
+	+__O2XY
+	JSR _GX_STR
+	RTS
+	
+;init_ec() 
+;copies EC values
+_INITEC 
+	LDA #<D_EC
+	STA FARG1
+	LDA #>D_EC
+	STA FARG2
+	LDA #<V_EC
+	STA FARG3
+	LDA #>V_EC
+	STA FARG4
+	LDA #STATE_C
+	STA FARG5
+	JSR _COPY
+	RTS 
+	
+;partisan_float_calculation()
+;calculates and stores (1 / ((S_PLAYER-2) * S_PARTISAN))
+_PRTFCALC
+	LDA #00
+	LDY #01
+	JSR _162FAC
+	JSR _FAC2ARG
+	
+	LDA #00
+	STA OFFSET
+	STA OFFSET+1
+	LDA S_PLAYER
+	SEC
+	SBC #01
+	TAX
+	LDY S_PARTISAN
+	INY
+	JSR _OFFSET
+	
+	LDA #00
+	LDY OFFSET
+	JSR _162FAC
+	JSR _DIVIDE
+	LDX #<V_INCPERC
+	LDY #>V_INCPERC
+	JSR _MOVMF
+	LDA V_INCPERC+1
+	AND #%01111111
+	STA V_INCPERC+1
+	RTS
+
+;checks if every player is an AI	
+_ALLAICHK
+	LDX #00
+@LOOP
+	LDA V_AI,X
+	BEQ @FALSE
+	INX
+	CPX S_PLAYER
+	BNE @LOOP
+	LDA #01
+@FALSE
+	STA V_ALLAI
+	RTS
+
+;counts number of swing states (SL difference = 0)
+_SWINGCT
+	LDA #00
+	STA V_SWINGCT
+	JSR _CPOFFR
+@LOOP
+	LDY #CPBLEAN
+	LDA (CP_ADDR),Y
+	INY
+	STA FVAR1
+@EQLOOP
+	LDA (CP_ADDR),Y
+	BEQ @TRUE
+	CMP FVAR1
+	BNE @FALSE
+	INY
+	CPY #CPBLOCK
+	BNE @EQLOOP
+@TRUE
+	LDA #01
+	BNE @ADD
+@FALSE
+	LDA #00
+@ADD
+	CLC
+	ADC V_SWINGCT
+	STA V_SWINGCT
+	
+	JSR _CPOFFI
+	BNE @LOOP
+	
+	LDA V_SWINGCT
+	LSR
+	LSR
+	LSR
+	CLC
+	ADC #01
+	CMP #ACTIONMAX+1
+	BCC @SKIP
+	LDA #ACTIONMAX
+@SKIP
+	STA V_TVMAX
+	RTS
+	
+;domination_check()
+;if a state's winner has controlled it (had a margin > 0) for the entire game, +1 SL
+;if a candidate has won in a V_LANDSLIDE, +1 SL to all states
+_DOMCHECK
+	JSR _SUMEC
+	JSR _CPOFFR
+	LDA #01
+	STA V_SUMFH
+@STATELOOP
+	LDA #01
+	STA V_WEEK
+	LDX CPSTATE
+	JSR _LDACTRL
+	STA FVAR4 ;state winner
+@WEEKLOOP
+	JSR _HSOFFS
+	LDX CPSTATE
+	JSR _HSOFFS2
+	
+	LDA #01
+	STA V_MARGIN
+	JSR _PCTRL
+	LDA FRET3 ;get margin winner, not CTRL value from history
+	CMP FVAR4 ;winner index
+	BNE @FALSE
+
+	INC V_WEEK
+	LDA V_WEEK
+	CMP #WEEKMAX+1
+	BNE @WEEKLOOP
+@TRUE
+	LDA FVAR4
+	CLC
+	ADC #CPBLEAN
+	TAY
+	LDA (CP_ADDR),Y
+	CLC
+	ADC #01
+	STA (CP_ADDR),Y
+	
+@FALSE
+	LDX V_LANDSLIDE
+	BEQ @LANDSLIDE
+	DEX
+	STX FX1
+	LDX FSTATE
+	LDA V_CTRL,X ;get state's winner
+	CMP FX1
+	BNE @LANDSLIDE
+	
+	LDA FX1
+	CLC
+	ADC #CPBLEAN
+	TAY
+	LDA (CP_ADDR),Y
+	CLC
+	ADC #02
+	STA (CP_ADDR),Y
+@LANDSLIDE
+
+	JSR _CPOFFI
+	BNE @STATELOOP
+	RTS
+

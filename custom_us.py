@@ -17,13 +17,14 @@ inStateLean = []
 inIssues = []
 inEC = [0] * STATES
 
+print(inData.remove(inData[0]))
 stateIndex = 0
 for line in inData:
     noNewLine = line[:-1]
     processedLine = noNewLine.split(',')
-    inStateLean.append(processedLine[0])
-    inIssues.append((processedLine[1],processedLine[2],processedLine[3],processedLine[4],processedLine[5]))
-    inEC[stateIndex] = processedLine[6]
+    inStateLean.append((processedLine[0],processedLine[1]))
+    inIssues.append((processedLine[2],processedLine[3],processedLine[4],processedLine[5],processedLine[6]))
+    inEC[stateIndex] = processedLine[7]
     stateIndex += 1
 
 fileBytes = bytes.hex(camp.read())
@@ -35,9 +36,7 @@ lastString = fileBytes[modOffset+SIZE*2:]
 newString = ""
 for stateIndex in range(0,STATES):
     stateLeans = inStateLean[stateIndex]
-    newString += str(stateLeans[0])
-
-newString += '0' #odd number of states
+    newString += str(stateLeans[0])+str(stateLeans[1])
 
 compress = ""
 for stateIndex in range(0,STATES):
@@ -62,4 +61,3 @@ camp = open(str(Path(sys.argv[1]+"mod")), "wb")
 asBinary = bytes.fromhex(campString)
 camp.write(asBinary)
 camp.close()
-print("MOD SUCCESSFUL!")

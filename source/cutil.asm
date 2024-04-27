@@ -5,10 +5,7 @@
 ;fire_to_confirm() 
 ;returns 0 if fire key, nonzero val if not fire 
 _FTC 
-	LDA #P_TOP
-	STA GX_CROW
-	LDA #P_FTCC
-	STA GX_CCOL
+	+__COORD P_TOP,P_FTCC
 	+__LAB2XY T_FTC
 	JSR _GX_STR
 
@@ -34,7 +31,7 @@ _FTC
 
 ;right_select(X=top row,Y=bottom)
 ;note: rows are separated by 2
-;returns (selected row) to FRET1
+;returns (selected row) to A/FRET1
 _RSELECT 
 	TXA 
 	STA GX_CROW
@@ -180,8 +177,26 @@ _PERCEN2
 ;divide_float()
 ;jumps to FDIVT, but clears zero flag automatically (otherwise FDIVT throws an error)
 _DIVIDE
+	JSR _POSFLOAT
 	LDA #$01
 	JSR _FDIVT
+	JSR _POSFLOAT
+	RTS
+
+;multiply_float()
+;jumps to FMULTT, but clears zero flag automatically (otherwise FMULTT will immediately quit if zero flag set)
+_MULTIPLY
+	JSR _POSFLOAT
+	LDA #$01
+	JSR _FMULTT
+	JSR _POSFLOAT
+	RTS
+
+;subtract_float()
+_SUBTRACT
+	JSR _POSFLOAT
+	JSR _FSUBT
+	JSR _POSFLOAT
 	RTS
 
 ;percent(smaller=farg1(L),f2(H); larger=f3,f4)
@@ -190,19 +205,30 @@ _DIVIDE
 ;#7FFF is max positive value?
 _PERCENT 
 	JSR _PERCEN2
-	JSR _FAC2STR ;float to str
-	JSR _PERCFMT
-	RTS 
+	JSR _PERCTRUNC
+	RTS
 
-;percent_format() 
+;load_fixed_percent(_PCTRL called before, X = player index)
+;loads the fixed percentages calculated in _PCTRL, divided by 100
+_LDAFPERC
+	JSR _SETFPERC
+	
+	LDA OFFSET
+	LDY OFFSET+1
+	JSR _MOVFM
+	JSR _FDIV10
+	JSR _FDIV10
+	RTS
+
+;percent_truncate() 
 ;transfers string to V_FPOINT, truncates to 2 digits
-_PERCFMT 
+_PERCTRUNC 
 	JSR _STRPERC
+_PERCTRUNC2
 	LDA #00 ;draw 2 digits only
 	STA V_FPOINT+3
 	LDA #VK_PERC
 	STA V_FPOINT+2
-
 	RTS 
 
 ;arg_to_float3() 
@@ -247,11 +273,25 @@ _F32FAC
 	CPX #FLOATLEN
 	BNE @LOOP
 	RTS 
-;percent_string() 
-;5-char percentage string from FAC zstr
-;string at $0100
-;outputs to V_FPOINT
+;fac_to_margin() 
+;transfers FAC to V_MARGIN
+_FAC2MARG
+	LDX #00
+@LOOP 
+	LDA FAC,X
+	STA V_MARGINF,X
+	INX 
+	CPX #FLOATLEN
+	BNE @LOOP
+	RTS 
+
+;percent_string(FAC = percentage to draw in original decimal format)
+;outputs 5-char percentage string from FAC to V_FPOINT
 _STRPERC
+	JSR _FMUL10
+	JSR _FMUL10
+	JSR _FAC2STR
+	
 	LDX #00 ;zeroes
 @00LOOP 
 	LDA T_00PC,X
@@ -260,79 +300,77 @@ _STRPERC
 	CPX #FLOATLEN ;zero-terminated
 	BNE @00LOOP
 
-	LDA V_STRING
-	STA GX_FORM1
-	LDA V_STRING+1
-	STA GX_FORM2
-	BNE @NOT1
-	;either zero or one
-	LDA GX_FORM1
-	CMP #$30
-	BNE @ONE
-	RTS 
-@ONE 
+	LDA #<D_FLOATCAP
+	LDY #>D_FLOATCAP
+	JSR _FCOMP
+	BPL @NOTMIN
+	RTS
+@NOTMIN
+	LDA #<D_FLOATMAX
+	LDY #>D_FLOATMAX
+	JSR _FCOMP
+	BNE @NOTMAX
+	BMI @NOTMAX
+	
 	LDX #00
 @99LOOP 
 	LDA T_99PC,X
 	STA V_FPOINT,X
 	INX 
-	CPX #FLOATLEN
+	CPX #FLOATLEN ;zero-terminated
 	BNE @99LOOP
-	BEQ @RTS
-@NOT1 
-	LDA V_STRING+2
-	CMP #$2E
-	BEQ @SCI
-	LDX #01
-	LDY #00
-@SLOOP 
-	LDA V_STRING,X
-	BEQ @RTS
-	CMP #$2E
-	BEQ @SKIDEC
-	STA V_FPOINT,Y
-	INY 
-	CPY #$02
-	BNE @SKIDEC
-	INY 
-@SKIDEC 
-	INX ;skip input dec
-	CPY #$05
-	BNE @SLOOP
-	BEQ @RTS
-
-@SCI 
+	RTS
+	
+@NOTMAX
+	
 	LDA V_STRING
 	CMP #VK_SPACE
-	BNE @SHIFT
+	BNE @SPACE
 	LDX #00
 @SHIFTLP
 	LDA V_STRING+1,X
-	BEQ @SHIFT
 	STA V_STRING,X
 	INX
-	JMP @SHIFTLP
-@SHIFT
-	LDX #$FF
-@SCILOOP 
-	INX 
-	LDA V_STRING,X
-	CMP #$2D
-	BEQ @BREAKE
-	BNE @SCILOOP
-@BREAKE 
-	INX 
-	INX 
-	;INX 
-	LDA V_STRING,X
-	AND #$0F ;mask char
-	CMP #$05
-	BCS @RTS
-	LDX #00
-	TAY 
-	BNE @SLOOP
+	CPX #FLOATLEN
+	BNE @SHIFTLP
+@SPACE
 
-@RTS RTS
+	LDX #00
+@DECLOOP
+	LDA V_STRING,X
+	CMP #VK_DEC ;decimal
+	BEQ @DECFOUND
+	INX
+	CPX #03
+	BNE @DECLOOP
+	BEQ @NODEC
+@DECFOUND
+	TXA ;2 - X
+	CLC
+	ADC #$FE
+	JSR _NEGATIV
+	TAX
+	LDY #00
+@COPYLOOP
+	LDA V_STRING,Y
+	BEQ @NULL
+	CMP #VK_DEC
+	BEQ @SKIP
+	STA V_FPOINT,X
+@SKIP
+	INX
+	INY
+	CPX #FLOATLEN
+	BNE @COPYLOOP
+@NULL
+	RTS
+@NODEC
+	LDX #00
+@NULLLP
+	LDA V_STRING,X
+	BEQ @DECFOUND
+	INX
+	BNE @NULLLP
 
 ;float_append_percent() 
 ;applies to V_FPOINT
@@ -343,48 +381,45 @@ _FSTRAP
 	STA V_FPOINT+6
 	RTS 
 
-;float_truncate_2() 
-;cuts the string to two chars
-;_FSTRT2 LDA #00
-;	STA V_FPOINT+2
-;	RTS 
-
 ;clear_string() 
-_CLRSTR LDX #00
+_CLRSTR 
+	LDX #00
 	LDA #00
-@LOOP STA V_STRING,X
+@LOOP 
+	STA V_STRING,X
 	INX 
 	CPX #10
-
-
 	BNE @LOOP
 	RTS 
 
 ;offset(x,y,OFFSET) 
-;adds ;Y times X to OFFSET
-_OFFSET CPX #00
+;adds (Y times X) to OFFSET
+_OFFSET 
+	CPX #00
 	BEQ @RTS
-@LOOP TYA
+@LOOP 
+	TYA
 	CLC 
 	ADC OFFSET
 	STA OFFSET
 	BCC @CARRY
 	INC OFFSET+1
-@CARRY DEX
+@CARRY 
+	DEX
 	BNE @LOOP
-@RTS RTS
+@RTS 
+	RTS
 
-;cp_offset(farg1=state index)
-;sets CP_ADDR to state CP 9-block, IS_ADDR to issue 5-block
+;cp_offset()
+;sets CP_ADDR to state CP 8-block, IS_ADDR to issue 5-block
 ;LOCAL: FX1,FY1
 _CPOFFS 
 	STX FX1
 	STY FY1
-	LDA FARG1
-	STA V_LSTATE ;save state
+	STA CPSTATE ;save state
 	+__LAB2O V_CP
-	LDY #$09
-	LDX FARG1
+	LDY #CPBLOCK
+	LDX CPSTATE
 	DEX ;in state index starts at 1
 	JSR _OFFSET
 	LDA OFFSET
@@ -394,12 +429,11 @@ _CPOFFS
 
 	+__LAB2O V_ISSUE
 	LDY #$05
-	LDX FARG1
+	LDX CPSTATE
 	DEX 
 	JSR _OFFSET
 	LDA OFFSET
 	STA IS_ADDR
-	STA HS_ADDR
 	LDA OFFSET+1
 	STA IS_ADDR+1
 
@@ -409,13 +443,12 @@ _CPOFFS
 
 ;cp_offset_inc() 
 ;increments both CP_ADDR and IS_ADDR to next state
+;returns boolean (last state)
 _CPOFFI 
 	LDA CP_ADDR
 	CLC 
-	ADC #$09
+	ADC #CPBLOCK
 	STA CP_ADDR
-
-
 	BCC @CARRY
 	INC CP_ADDR+1
 @CARRY 
@@ -425,19 +458,15 @@ _CPOFFI
 	STA IS_ADDR
 	BCC @CARRY2
 	INC IS_ADDR+1
-@CARRY2 
-	LDA HS_ADDR
-	CLC 
-	ADC #$05
-	STA HS_ADDR
-	BCC @CARRY3
-	INC HS_ADDR+1
-@CARRY3 
-	INC V_LSTATE
+@CARRY2
+	INC CPSTATE
+	LDA CPSTATE
+	CMP #STATE_C
 	RTS 
 
-;cp_offset_reset() 
-_CPOFFR LDA #<V_CP
+;cp_offset_reset()
+_CPOFFR 
+	LDA #<V_CP
 	STA CP_ADDR
 	LDA #>V_CP
 	STA CP_ADDR+1
@@ -446,13 +475,20 @@ _CPOFFR LDA #<V_CP
 	LDA #>V_ISSUE
 	STA IS_ADDR+1
 	;does NOT reset HS_ADDR!
+	LDA #01
+	STA CPSTATE
 	RTS 
+
+;cp_offset_max()
+_CPOFFM
+	LDA CPSTATE
+	CMP #STATE_C
+	RTS
 
 _RNG 
 	STA RNG1
 	LDA #$FF
 	STA RNG2
-	;JSR _RNGINIT
 @LOOP 
 	LDA RNG1
 	CMP RNG2
@@ -467,8 +503,6 @@ _RNG
 	AND RNG2
 	CMP RNG1
 	BCS @REROLL
-
-	;JSR _RNGOFF
 	CMP #$00
 	RTS 
 
@@ -490,6 +524,18 @@ _INT
 	JSR _ABS2
 	JSR _FAC2STR2
 	RTS 
+	
+_INTCMB
+	JSR _INT
+	+__LAB2XY V_STRING
+	JSR _GX_STR
+	RTS
+_INTCMB2
+	JSR _INT
+	JSR _INTWS3
+	+__LAB2XY V_STRING
+	JSR _GX_STR
+	RTS
 	
 _INPUT
 	JSR _GETINP
@@ -552,10 +598,8 @@ _PLAYINP
 	STA FVAR1 ;cursor pos
 
 	+__COORD P_PLAYNR,P_PLAYNC
-	LDA #$09
-	STA T_BLANKX+4
-	+__LAB2XY T_BLANKX
-	JSR _GX_STR
+	LDA #NAMELEN-1
+	JSR _DRWBLANK
 	+__COORD P_PLAYNR,P_PLAYNC
 	
 	LDA #C_WHITE
@@ -586,7 +630,7 @@ _PLAYINP
 	JSR _PLAYIN2
 
 	LDA FVAR1
-	CMP #$09
+	CMP #NAMELEN-1
 	BNE @GETINP
 	BEQ @PPROC
 
@@ -609,7 +653,6 @@ _PLAYINP
 	LDA V_FPOINT
 	BEQ @PLAYVER ;no empty name
 
-
 	CMP #$20 ;no leading space
 	BEQ @PLAYVER
 
@@ -620,18 +663,17 @@ _PLAYINP
 
 	LDX #00
 	LDY #00
-@CLOOP LDA V_FPOINT,X
-	BNE @FILLSPAC
-	LDA #$20 ;fill empty space
-@FILLSPAC 
+@CLOOP 
+	LDA V_FPOINT,X
 	STA (OFFSET),Y
 	INX 
 	INY 
-	CPX #$09
+	CPX #NAMELEN-1
 	BNE @CLOOP
 	LDA #00
-	LDY #$09
+	LDY #NAMELEN-1
 	STA (OFFSET),Y
+	
 @PLAYVER ;display final name
 	+__COORD P_PLAYNR,P_PLAYNC
 	LDA V_PARTY
@@ -669,27 +711,6 @@ _COPY
 	CPY FARG5
 	BNE @LOOP
 	RTS
-
-;store_local_variables() 
-;stores FVAR1-5 out of ZP
-_SFVAR 
-	LDX #04
-@LOOP 
-	LDA FVAR1,X
-	STA V_FVAR,X
-	DEX 
-	BPL @LOOP
-	RTS 
-;load_local_variables() 
-;loads FVAR1-5 into ZP
-_LFVAR 
-	LDX #04
-@LOOP 
-	LDA V_FVAR,X
-	STA FVAR1,X
-	DEX 
-	BPL @LOOP
-	RTS 
 
 ;intws3() 
 ;pads intstring with whitespace
@@ -849,22 +870,48 @@ _CHARSET3
 
 	RTS 
 
-;move_cp_to_max(CP_ADDR preset)
-;moves CP data per player to V_MAX
-_CPTOMAX
-	JSR _MAXR
-	LDY #01
-	LDX #01
-@MAXLOOP 
+;copy_lean()
+;copies lean from CP_ADDR/HS_ADDR to V_LEAN
+_COPYLEAN
+	LDY #CPBLEAN
+	LDX #00
+	LDA V_SUMFH
+	BNE @HIST
+@LOOP
 	LDA (CP_ADDR),Y
-	STA V_MAX,X
-	INX 
-	INX 
-	INY 
-	CPY S_PLAY1M
-	BNE @MAXLOOP
+	STA V_LEAN,X
+	INX
+	INY
+	CPX #CPBLEAN
+	BNE @LOOP
 	RTS
-
+@HIST
+	LDA (HS_ADDR),Y
+	STA V_NIBBLE
+	JSR _UNIBBLE
+	LDA V_NIBBLE+0
+	STA V_LEAN,X
+	LDA V_NIBBLE+1
+	INX
+	STA V_LEAN,X
+	INX
+	INY
+	CPY #HISTBLOCK-1
+	BNE @HIST
+	RTS
+	
+_LEANTOMAX
+	LDX #00
+	LDY #00
+@COPYLOOP
+	LDA V_LEAN,X
+	STA V_MAX,Y
+	INX
+	INY
+	INY
+	CPX S_PLAYER
+	BNE @COPYLOOP
+	RTS
 
 ;set_player_limits(A = player count)
 _SETPLIM
@@ -874,9 +921,110 @@ _SETPLIM
 	INC S_PLAY1M
 	RTS
 	
-;popular_float_to_offset(Y = party index)
-_POP2OFF
-	+__LAB2O V_POPULAR
+;float_to_offset(Y = party index)
+_FLT2OFF
+	+__LAB2O V_CPFLOAT
 	LDX #FLOATLEN
 	JSR _OFFSET
 	RTS
+	
+;load_region_limits(X = region index)
+_LREGLIM
+	LDA D_REGLIM-1,X
+	STA LOWSTATE
+	LDA D_REGLIM,X
+	STA HIGHSTATE
+	RTS
+
+;load_state_lean(V_PARTY = party, CP_ADDR set beforehand)
+;uses A, Y
+_LDALEAN
+	LDA V_PARTY
+	CLC
+	ADC #CPBLEAN
+	TAY
+	LDA (CP_ADDR),Y
+	RTS
+	
+;store_bit(OFFSET = address, X = bit starting from least significant bit 0, A = set value (0 or 1))
+;sets bit X at address OFFSET, Y to A
+;example: A = 0; X = 0; byte = 11111111; result = 11111110
+;example: A = 1; X = 0; byte = 11111111; result = 11111111
+;example: A = 1; X = 3; byte = 11110000; result = 11111000
+_STABIT
+	CMP #00
+	BEQ @ZERO
+	LDA #01 ;any value not zero = 1
+@LOOP
+	CPX #00
+	BEQ @DONE
+	ASL
+	DEX
+	BNE @LOOP
+@DONE
+	ORA (OFFSET),Y
+	STA (OFFSET),Y
+	RTS
+@ZERO
+	LDA #%11111110
+@LOOP2
+	CPX #00
+	BEQ @DONE2
+	SEC
+	ROL
+	DEX
+	BNE @LOOP2
+@DONE2
+	AND (OFFSET),Y
+	STA (OFFSET),Y
+	RTS
+	
+;load_bit(OFFSET = address, X = bit starting from least significant bit 0)
+;loads bit X at address OFFSET, Y (returns non-zero)
+_LDABIT
+	LDA #01
+@LOOP
+	CPX #00
+	BEQ @DONE
+	ASL
+	DEX
+	BNE @LOOP
+@DONE
+	AND (OFFSET),Y
+	BEQ @RTS
+	LDA #01
+@RTS
+	RTS
+
+;FAC_is_zero
+_FACIS0
+	LDX #00
+@LOOP
+	LDA FAC,X
+	BNE @FALSE
+	INX
+	CPX #FLOATLEN
+	BNE @LOOP
+	LDA #01
+	RTS
+@FALSE
+	LDA #00
+	RTS
+	
+;pack_nibble(V_NIBBLE+0/+1)
+;packs two 4-bit values (formatted like #%0000xxxx)
+;returns A = packed value
+_NIBBLE
+	LDA V_NIBBLE+0
+	ASL
+	ASL
+	ASL
+	ASL
+	ORA V_NIBBLE+1
+	RTS
+	
+
+
+
+
+ 

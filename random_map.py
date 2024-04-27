@@ -34,7 +34,7 @@ def main():
     while LEAN_TOTAL != 0:
 
         stateIndex = random.randint(0, STATES - 1)
-        if leans[stateIndex] < 9:
+        if leans[stateIndex] < 8:
             leans[stateIndex] += 1
             LEAN_TOTAL -= 1
 
@@ -63,11 +63,12 @@ def main():
     print(issues)
 
     mapFile = open(str(Path(sys.argv[1])), "w")
-    #mapFile.write(str(sys.argv[2])+'\n')
+    mapFile.write(str(sys.argv[2])+'\n')
     for stateIndex in range(0,STATES):
         writeIssues = issues[stateIndex]
         line = ""
         line += str(leans[stateIndex]) + ','
+        line += str(9 - leans[stateIndex]) + ','
         for i in range(0,5):
             line += str(writeIssues[i]) + ','
         line += str(ec[stateIndex]) +'\n'
@@ -79,7 +80,7 @@ def calcSums():
     sumR = [0] * STATES
     for i in range(0, STATES):
         sumD[i] = leans[i] * ec[i]
-        sumR[i] = (10 - leans[i]) * ec[i]
+        sumR[i] = (9 - leans[i]) * ec[i]
 
     difference = sum(sumD) - sum(sumR)
 
@@ -89,7 +90,7 @@ def calcSums():
 lean is provided as R lean
 """
 def generateIssue(lean):
-    leanTable = [[1],[1,1,2],[2,3],[3,3,4],[3,4],[3,4,4],[5,6],[5,6,6],[6]]
+    leanTable = [[1],[2],[2,3],[3],[4],[4,5],[5],[6]]
     options = leanTable[lean-1]
     selectedValue = options[random.randint(0,len(options)-1)]
     if random.randint(0,1) == 0:

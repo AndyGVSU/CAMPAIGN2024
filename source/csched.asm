@@ -32,14 +32,14 @@ _CLRBR
 ;AND precalcs the action's CP/HEALTH/FUNDS
 ;LOCAL: FVAR1
 _SCHADD 
-	LDX C_SCHEDC
 	STA FVAR1
+_SCHADD2
+	LDX C_SCHEDC
 	TAY 
 
 	LDA #00
 	STA V_WARN ;clear schedule warning
 	STA V_TVWARN ;clear TV ADS halving warning
-	STA V_WARNCAP
 
 	TYA
 	BNE @TVADS ;visit
@@ -64,36 +64,26 @@ _SCHADD
 @DONE 
 	LDX C_SCHEDC
 	STA C_SCHED,X
+	STA V_SCHED,X
 	INC C_SCHEDC
+	INC V_SCHEDC
 
 	LDA FVAR1
 	JSR _SCHPC
-	;JSR _SCHWARN
-
+	
+	LDX C_SCHEDC
+	LDA V_CPGPTR
+	STA V_CPGPTRO,X
 ;PROCEED DIRECTLY TO _SCHDRW
 
-;draw_to_schedule(A=action,FARG1=visited state)
+;draw_to_schedule(FVAR1=action,FARG1=visited state)
 ;draws the provided action to schedule
 _SCHDRW
 	LDA S_SKIPGAME
 	BEQ @SKIPGAME
 	RTS
 @SKIPGAME
-
-	LDA C_SCHEDC
-	CLC 
-	ADC #P_SCH2R
-	STA GX_CROW
-	LDA #P_SCH2C
-	STA GX_CCOL
-	;set blank count
-	LDA #09
-	STA T_BLANKX+4
-
-	+__LAB2XY T_BLANKX
-	JSR _GX_STR
-	LDA #P_SCH2C
-	STA GX_CCOL
+	JSR _SCHDRW3
 	LDX FVAR1
 	JSR _SCHDRW2
 	JSR _SCHWARN
@@ -135,18 +125,28 @@ _SCHDRW2
 	+__LAB2XY T_REST
 	JSR _GX_STR
 	RTS 
-
+;clear schedule line for current count and reset column
+_SCHDRW3
+	LDA C_SCHEDC
+	CLC 
+	ADC #P_SCH2R
+	STA GX_CROW
+	LDA #P_SCH2C
+	STA GX_CCOL
+	;set blank count
+	LDA #09
+	JSR _DRWBLANK
+	LDA #P_SCH2C
+	STA GX_CCOL
+	RTS
+	
 ;schedule_warning() 
 ;draws a warning if one was issued during precalc
 _SCHWARN 
 	LDA S_SKIPGAME
 	BNE @RTS
-	LDA V_OUTOFM
+	LDA V_STAFFOUT
 	BNE @RTS
-
-	;LDX V_PARTY ;skip if AI
-	;LDA V_AI,X
-	;BNE @RTS
 
 	LDA C_SCHEDC
 	CLC 
@@ -164,15 +164,10 @@ _SCHWARN
 	BNE @DRAW
 @TVWARN 
 	LDA V_TVWARN
-	BEQ @CAPWARN
+	BEQ @RTS
 	LDA #VK_PERC
 	STA GX_CIND
 	BNE @DRAW
-@CAPWARN
-	LDA V_WARNCAP
-	BEQ @RTS
-	LDA #PLUS
-	STA GX_CIND
 @DRAW 
 	JSR _GX_CHAR
 @RTS 
@@ -194,6 +189,8 @@ _SCHPC
 @TVADS 
 	DEX 
 	BNE @FUNDR
+	LDA FARG1
+	STA FARG3 ;swap, since uses _CPOFFS
 	JSR _CALCTV
 	RTS 
 @FUNDR 
@@ -212,35 +209,32 @@ _SCHCLR
 	TAX 
 @SLOOP ;clear schedule/schedule count
 	STA C_SCHEDC,X
+	STA V_SCHEDC,X
 	INX 
-	CPX #$08
+	CPX #ACTIONMAX+1
 	BNE @SLOOP
 	;clear fund/health precalc
 	LDX #00
 @PLOOP 
 	STA V_FHCOST,X
 	INX 
-	CPX #$4F
+	CPX #CPGAIN_MAX
 	BNE @PLOOP
 	
-	LDX #00
-@CLOOP
-	STA V_CPCAP,X
-	INX
-	CPX #STATE_C
-	BNE @CLOOP
-	
 	STA V_CPGPTR ;cp gain ptr reset
-	LDA C_HEALTH ;init running totals
-	STA V_FHCOST
-	LDA C_MONEY
-	STA V_FHCOST+1
-
+	
+	LDX V_PARTY
+	LDA V_STLOCK,X
+	BEQ @RTS
+	STA V_SCHED
+	STA V_SCHED+1
+	LDA #02
+	STA V_SCHEDC
+@RTS
 	RTS 
 
 ;execute_schedule() 
 ;adds the precalc'd variables to CP/health/funds
-;LOCAL: FVAR3
 _SCHEXE 
 	LDA #00
 	TAX 
@@ -254,29 +248,37 @@ _SCHEXE
 	BEQ @INC ;fundraise
 	CMP #$F0
 	BCS @TVADS
-	AND #$7F ;visit
+	AND #%01111111 ;visit
+	PHA
+
+	JSR _STATEGR
+	TXA
+	LDX V_PARTY
+	CMP V_RALLYDEATH,X
+	BNE @SKIPDEATH
+	LDA #EVC_SCANDAL_DEATH
+	STA V_SCANDAL,X
+@SKIPDEATH
+	PLA
+	
 	TAX
-	;INC V_VISLOG,X
 	JSR _SCHEXE2
 	JMP @INC
 @TVADS 
 	AND #$0F
 	TAX 
-	LDA D_REGLIM,X
-	STA FVAR3
-	LDA D_REGLIM-1,X
-	STA FSTATE
+	JSR _LREGLIM
 @REGLOOP 
-	LDA FSTATE
+	LDA LOWSTATE
 	JSR _SCHEXE2
-	INC FSTATE
-	LDA FSTATE
-	CMP FVAR3
+	INC LOWSTATE
+	LDA LOWSTATE
+	CMP HIGHSTATE
 	BNE @REGLOOP
 @INC 
 	INC C_SCHEDC
 	LDA C_SCHEDC
-	CMP #$07
+	CMP #ACTIONMAX
 	BNE @LOOP
 
 	LDA V_FHCOST+14
@@ -287,12 +289,11 @@ _SCHEXE
 	RTS 
 ;A = set state, load cp gain, add to state, inc ptr
 _SCHEXE2 
-	STA FARG1
 	JSR _CPOFFS
 	LDX V_CPGPTR
 	LDA V_CPGAIN,X
 	STA FRET1
-	JSR _ADDCPU
+	JSR _ADDCP
 	INC V_CPGPTR
 	RTS 
 
@@ -300,9 +301,8 @@ _SCHEXE2
 ;calculates the FUNDRAISE gain
 _CALCFND 
 	LDA C_FUND
-	ASL ;fund ; 2
+	ASL
 	STA FRET3 ;running total is COST, so positive
-	JSR _EFUNDS2
 	JSR _STPCHF
 	RTS 
 
@@ -310,7 +310,7 @@ _CALCFND
 
 
 _CALCZZ 
-	LDA C_PARTY
+	LDA V_PARTY
 	JSR _CTRLCNT
 	LDA FRET2
 	CLC 
@@ -325,7 +325,6 @@ _CALCZZ
 	LDA #$7F
 @CAP
 	STA FRET2
-	JSR _EHEALTH2
 
 	LDA #00
 	STA FRET1
@@ -345,6 +344,8 @@ _CALCVIS
 	LDA FARG1
 	ORA #$80
 	STA V_VBONUS
+	LDA #$01
+	STA V_WARN 
 	JMP @COST
 @LOWHEAL 
 
@@ -362,8 +363,6 @@ _CALCVIS
 	STA FRET3
 	JMP @WARNING
 @DOUBLE
-	
-	
 	LDA V_VBONUS
 	AND #$7F
 	CMP FARG1
@@ -383,10 +382,18 @@ _CALCVIS
 	JMP @WARNING ;no setup fee, action wasted
 @CANPAY 
 	JSR _CALCTRV ;calculate travel cost
+	LDA FARG1
 	JSR _CPOFFS ;state still in FARG1
-	LDA C_PARTY
+	LDY V_PARTY
+	LDA (CP_ADDR),Y
+	CMP #$FF
+	BNE @CAP
+	JMP @WARNING
+@CAP
+	
+	TYA
 	CLC 
-	ADC #UND_OF1M
+	ADC #CPBLEAN
 	TAY 
 	LDA (CP_ADDR),Y
 	STA FRET1 ;base CP = state lean
@@ -399,6 +406,8 @@ _CALCVIS
 	AND #$80
 	BEQ @NOTCSEC
 	INC FRET1 ;+1 for >2 visits
+	LDA #$01
+	STA V_WARN 
 	BNE @COST
 @NOTCSEC 
 	INC FRET1
@@ -410,7 +419,9 @@ _CALCVIS
 @DIFSTAT 
 	LDA FARG1
 	STA V_VBONUS
-@REMAING 
+@REMAING
+	JSR _FILLVB
+
 	LDA C_CER
 	JSR _CPADD
 	JSR _LDAPCH
@@ -421,7 +432,7 @@ _CALCVIS
 	LSR 
 	JSR _CPADD ;health / 32
 	JSR _CISSUEB ;issue bonus
-@COST
+@COST ;if we get to this point, there was a CP gain
 	;event handling
 	LDY FARG1
 	LDA #EV_FAIR
@@ -441,15 +452,9 @@ _CALCVIS
 
 	LDA FRET1
 	LDX FARG1
-	JSR _CPCAP
 	JSR _STPCCP
-	PHA
-	CMP #$0A
-	BCS @NOWARN
-	LDA #$01
-	STA V_WARN ;warning if CP gain < 10
-@NOWARN 
-	PLA 
+	;warning if CP gain < 10
+;@NOWARN
 	LSR 
 	STA FRET2
 	LSR 
@@ -470,7 +475,10 @@ _CALCVIS
 ;calc_travel(FARG1=state) 
 ;sets travel cost flag
 ;VBONUS still set to last bonus
-_CALCTRV 
+_CALCTRV
+	LDX V_PARTY
+	LDA V_WARP,X
+	BNE @COST0
 	LDA V_VBONUS
 	AND #$7F
 	JSR _STATEGR
@@ -481,15 +489,16 @@ _CALCTRV
 	TXA 
 	CMP V_TRAVEL
 	BNE @COST1
+@COST0
 	LDA #$00
-	BEQ @COST0
+	BEQ @STA
 @COST1 
 	LDA #$01
-@COST0 
+@STA 
 	STA V_TRAVEL
 	RTS 
 
-;calc_tvads(FARG1=region) 
+;calc_tvads(FARG3=region) 
 ;calculates the CP/HEALTH/FUNDS changes from a TV ADS
 ;LOCAL: FVAR2,FVAR3
 _CALCTV 
@@ -497,80 +506,79 @@ _CALCTV
 	STA FVAR2 ;running total
 
 	JSR _LDAPCF
-	CMP #$0F
+	CMP #25
 	BCS @FUNDS
-	JMP @WARN ;if funds < 15, action wasted
+	JMP @WARN ;if funds < 25, action wasted
 @FUNDS 
 	JSR _LDAPCH
-	CMP #$1E ;if health < 30, action wasted
+	CMP #10 ;if health < 10, action wasted
 	BCS @HEALTH
 	JMP @WARN
 @HEALTH 
 
-	LDA FARG1 ;if power down event, action wasted
+	LDA FARG3 ;if power down event, action wasted
 	AND #$0F
-	TAY
-	LDA D_REGLIM-1,Y
-	TAY
+	TAX
+	JSR _LREGLIM
+	LDY LOWSTATE
 	LDA #EV_POWER
-	JSR _EVENTON
+	JSR _EVENTON ;only one state check required
 	BNE @POWEROUT
 	JMP @WARN
 @POWEROUT
 
-	LDX FARG1
-	DEX 
-	LDA D_REGLIM,X
+	LDA LOWSTATE
 	STA FSTATE
 	JSR _CPOFFS
-	LDA D_REGLIM+1,X
-
-	STA FVAR3
-@LOOP 
-	LDA V_WEEK
-	ASL 
+@LOOP
+	LDA #00
 	STA FRET1
 
 	LDA FSTATE
 	JSR _CISSUEB
+	ASL
+	STA FRET1
 
 	LDA C_TV
 	ASL
 	JSR _CPADD
 	LDA C_CER
 	JSR _CPADD
-	LSR FRET1
+	JSR _LDALEAN
+	JSR _CPADD
 	;event handling
 	LDY FSTATE
 	LDA #EV_TVADS
 	JSR _EVENTON
-	BNE @PLUS4
+	BNE @PLUS
+	LDA #04
+	JSR _CPADD
+@PLUS
 	LDA FRET1
+	LSR
+	LSR
+	LSR
 	CLC
-	ADC #$04
-	STA FRET1
-@PLUS4
-	
-	LDA FVAR2
-	CLC 
-	ADC FRET1
-	STA FVAR2 ;add to running total
+	ADC FVAR2
+	STA FVAR2 ;add (CP/8) to running total as cost (this is really (CP/2) / 4)
 
-	LDA FRET1
+	LDA FRET1 ;add (CP/2) to actual gain
+	LSR
 	JSR _STPCCP
 	
 	JSR _CPOFFI
 	INC FSTATE
 	LDA FSTATE
-	CMP FVAR3
+	CMP HIGHSTATE
 	BNE @LOOP
-
-	LDA FVAR2
-	LSR 
+	
+	LDA #10 ;flat cost of 10 HEALTH
 	STA FRET2
-	LSR 
+	LDA FVAR2
 	CLC 
 	ADC C_TV
+	ADC V_WEEK
+	ADC V_WEEK
 	STA FRET3
 @COST 
 	JSR _TVHALF
@@ -584,7 +592,7 @@ _CALCTV
 @RTS 
 	RTS 
 
-;tv_half(FARG1=region) 
+;tv_half(FARG3=region) 
 ;checks whether the HEALTH/FUND costs are below precalc h/f
 ;if not, halves the CP gains and the HEALTH/FUND costs
 _TVHALF 
@@ -599,7 +607,7 @@ _TVHALF
 	LDA #$01
 	STA V_TVWARN ;warning if halving occurs
 
-	LDX FARG1
+	LDX FARG3
 	LDA D_REGC-1,X
 	TAY 
 	INY 
@@ -609,7 +617,7 @@ _TVHALF
 	DEC V_CPGPTR
 	DEY 
 	BNE @LOOP
-	LDX FARG1
+	LDX FARG3
 	LDA D_REGC-1,X
 	CLC 
 	ADC V_CPGPTR
@@ -621,7 +629,7 @@ _TVHALF
 	JMP _TVHALF ;halve until no cost barrier
 @RTS
 	LDA V_CPGPTR
-	LDX FARG1
+	LDX FARG3
 	SEC
 	SBC D_REGC-1,X
 	STA V_CPGPTR
@@ -629,46 +637,15 @@ _TVHALF
 	LDA D_REGLIM-1,X
 	STA FSTATE
 @CAPLOOP
-	LDX V_CPGPTR
-	LDA V_CPGAIN,X
-	LDX FSTATE
-	JSR _CPCAP
-	LDX V_CPGPTR
-	STA V_CPGAIN,X
 	INC FSTATE
 	INC V_CPGPTR
 	LDA FSTATE
-	LDX FARG1
+	LDX FARG3
 	CMP D_REGLIM,X
 	BNE @CAPLOOP
 	
 	RTS 
-
-;cp_cap(A = CP gain, X = state index)
-;limits CP gains per state per WEEK to 64
-;returns A = capped CP gain
-_CPCAP
-	PHA
-	CLC
-	ADC V_CPCAP,X
-	CMP #65
-	BCS @OVER
-	STA V_CPCAP,X
-	PLA
-	RTS
-@OVER
-	PLA
-	LDA #$01
-	STA V_WARNCAP
-	LDA #64
-	SEC
-	SBC V_CPCAP,X
-	PHA
-	LDA #64
-	STA V_CPCAP,X
-	PLA
-	RTS
-
+	
 ;health_funds_negative() 
 ;makes VISIT, TV ADS HEALTH/FUND costs negative
 _HFNEG 
@@ -694,9 +671,7 @@ _LDAPCH
 @INIT 
 	LDA C_HEALTH
 	RTS 
-;load_precalc_funds() 
-
-
+;load_precalc_funds()
 ;.. 
 _LDAPCF 
 	LDA C_SCHEDC
@@ -791,9 +766,9 @@ _ACTLOG
 	STA V_PARTY ;party
 	
 	;header
-	LDA #$18
+	LDA #P_ACTLOGC
 	STA GX_CCOL
-	LDA #$00
+	LDA #P_TOP
 	STA GX_CROW
 	
 	+__LAB2XY T_WEEK
@@ -896,6 +871,7 @@ _ACTLOG
 	RTS
 
 ;action_to_action_selection (A = action)
+;converts schedule action code into action index
 _ACTLOG2
 	CMP #ACTIONREST
 	BEQ @REST
@@ -928,4 +904,49 @@ _ACTLOG3
 	JSR _OFFSET	
 	RTS
 
+;schedule_copy()
+;clears and adds schedule again
+_SCHCOPY
+	LDX V_SCHEDC
+	BEQ @RTS
+	STX FVAR7
+	
+	JSR _RESETVB
+	LDX #00
+	STX C_SCHEDC
+	STX V_SCHEDC
+	STX FVAR6
+@ADDLOOP	
+	LDA V_SCHED,X
+	JSR _ACTLOG2
+	LDA FVAR1 ;action index
+	JSR _SCHADD2
+	INC FVAR6
+	LDA FVAR6
+	TAX
+	CMP FVAR7
+	BNE @ADDLOOP
+	
+@RTS
+	RTS
+
+;fill_visit_bonus(A = visit bonus state index)
+;fill visit bonus to end of schedule to compensate for other actions not adding it
+_FILLVB
+	LDX C_SCHEDC
+@FILLVB
+	STA V_SCHEDVB,X
+	INX
+	CPX #07
+	BCC @FILLVB
+	RTS
+	
+;init_funds_health()
+;sets starting funds and health for WEEK
+_INITFH
+	LDA C_HEALTH ;init running totals
+	STA V_FHCOST
+	LDA C_MONEY
+	STA V_FHCOST+1
+	RTS
 

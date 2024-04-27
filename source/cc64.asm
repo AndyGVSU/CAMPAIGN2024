@@ -8,17 +8,7 @@ _GX_INIT
 	STA BACKCOL+1
 	LDA #C_WHITE
 	STA BACKCOL+2
-
-	;JSR _GX_ECM
-
 	RTS 
-
-;turns on ECM bit
-;_GX_ECM
-;	LDA SCRREG1
-;	ORA #$40
-;	STA SCRREG1
-;	RTS
 
 _GX_FILL 
 	LDA OFFSET
@@ -63,15 +53,9 @@ _GX_FILL
 @STORPT2 
 	LDA V_SPRPTR,X
 	STA SPRPTR,X
-
-
 	INX 
 	CPX #$08
 	BNE @STORPT2
-
-	RTS 
-
-_GX_LINE 
 
 	RTS 
 
@@ -83,18 +67,7 @@ _RNGINIT
 	STA $D40F
 	LDA #$80
 	STA $D412
-	;STA $D418
-
 	RTS
-	
-;_RNGOFF
-;	PHA
-;	LDA #00
-;	STA $D40F
-;	STA $D412
-;	STA $D418
-;	PLA
-;	RTS
 
 _GETINP 
 @LOOP
@@ -122,11 +95,7 @@ _GETINP
 _DRWMAP 
 	JSR _MAPCHAR
 	+__LAB2O D_MAPSHP
-
-	LDA #$D8
-	STA OFFSET2+1
-	LDA #$2C
-	STA OFFSET2
+	+__LAB2O2 COLRAM_MAP
 
 	LDA #00
 	STA GX_CROW
@@ -149,12 +118,12 @@ _DRWMAP
 	INC GX_CCOL
 	LDA GX_CCOL
 
-	CMP #$19
+	CMP #MAP_COLC
 	BNE @COLLOOP
 
 	LDA OFFSET2
 	CLC 
-	ADC #$0F
+	ADC #MAP_ROWC
 	STA OFFSET2
 	BCC @CARRY
 	INC OFFSET2+1
@@ -162,7 +131,7 @@ _DRWMAP
 
 	INC GX_CROW
 	LDA GX_CROW
-	CMP #$0F
+	CMP #MAP_ROWC
 	BNE @ROWLOOP
 @SKIP 
 	RTS 
@@ -199,36 +168,24 @@ _MAPCHAR
 	LDA (OFFSET2),Y
 	STA (OFFSET),Y
 	INY
-	CPY #25
+	CPY #MAP_COLC
 	BNE @COLLOOP
 	INC FVAR2
 	LDA FVAR2
-	CMP #15
+	CMP #MAP_ROWC
 	BEQ @DONE
 	LDX #01
 	LDY #40
 	JSR _OFFSET
 	LDA OFFSET2
 	CLC
-	ADC #25
+	ADC #MAP_COLC
 	STA OFFSET2
 	BCC @CARRY
 	INC OFFSET2+1
 @CARRY
 	JMP @ROWLOOP
 @DONE
-		
-	;LDA #$04
-	;STA GX_LX1
-	;LDA #$1D
-	;STA GX_LX2
-	;LDA #$01
-	;STA GX_LY1
-	;LDA #$10
-	;STA GX_LY2
-	;LDA #C_WHITE
-	;STA GX_DCOL
-	;JSR _GX_RECT
 	RTS 
 
 ;sprites initialize
@@ -243,22 +200,6 @@ _SPRINIT
 	CPY #$80
 	BNE @SPRCOPY
 
-;LDA D_SPRITE,Y
-;STA V_SPRITE+0,X
-;LDA D_SPRITE+8,Y
-;STA V_SPRITE+64,X
-;INX 
-;INX 
-;INX 
-;INY 
-;CPY #$07
-;BNE @SPRCOPY
-;LDA D_SPRITE,Y
-;STA V_SPRITE+0,X
-;STA V_SPRITE+1,X
-;STA V_SPRITE+2,X
-;LDA D_SPRITE+8,Y
-;STA V_SPRITE+64,X
 	LDA #$21
 	STA SPRPTR+0
 	LDA #$22
@@ -285,44 +226,103 @@ _SPRINIT
 	LDY #$04
 	RTS
 
-;set_margin_of_error()
-_SETMOE
-	LDA S_BLIND
-	BEQ @SKIP
-	LDA #99
-	STA V_MOE
+;draw_blank(A = count)
+_DRWBLANK
+    STA T_BLANKX+4
+    +__LAB2XY T_BLANKX
+    JSR _GX_STR
 	RTS
-@SKIP
 	
-	LDA S_PLAYER
-	CMP #$03 
-	BEQ @3P
-	CMP #$04
-	BEQ @4P
-@2P
-	LDA #23
-	SEC
-	SBC V_WEEK
-	SBC V_WEEK
-	STA V_MOE
-	JSR _ETERROR2
+;yes_or_no()
+;displays a yes or no prompt
+_YESORNO
+	+__COORD P_NOYESR,P_NOYESC
+	+__LAB2XY T_NOYES
+_YESORNO2
+	JSR _GX_STR	
+	LDX #P_NOYESR
+	LDY #P_NOYESR+1
+	JSR _RSELECT
 	RTS
-@4P
-	LDA V_WEEK
+
+;load_neglect(X = state index if not from history)
+_LDANEGL
+	LDA V_SUMFH
+	BNE @HIST
+	LDA V_NEGLECT,X
+	RTS
+@HIST
+	LDY #06
+	LDA (HS_ADDR),Y
+	RTS
+
+;float_add_with_flag_set()
+;FADDT work correctly
+_FADDFLAG
+	LDA #00
+	STA ARG+6 ;why does this work???
+	LDA FAC
+	JSR _FADDT
+	RTS
+	
+;table_jsr(X/Y = jump table address, A = jump table index) 
+_TABLJSR
+	;modify load address
+	STX @L1+1
+	STY @L1+2
+	STX @L2+1
+	STY @L2+2
+	
+	;set load address
+	ASL
+	TAX
+@L1
+	LDA $0000,X
+	PHA
+	INX
+@L2
+	LDA $0000,X
+	STA @TEST+2
+	PLA
+	STA @TEST+1
+@TEST	
+	;execute
+	JSR $0000
+	RTS
+	
+;copies V_MAX1B to V_MAX
+_MAX1B
+	LDX #00
+	LDY #00
+@LOOP
+	LDA V_MAX1B,X
+	STA V_MAX+1,Y
+	INX
+	INY
+	INY
+	CPX #$04
+	BNE @LOOP
+	RTS
+	
+;unpack_nibble(V_NIBBLE+0)
+;unpacks two 4-bit values
+;returns to V_NIBBLE+0, V_NIBBLE+1
+_UNIBBLE
+	LDA V_NIBBLE
+	PHA
+	AND #%11110000
 	LSR
-	STA FVAR1
-	LDA #$05
-	SEC
-	SBC FVAR1
-	STA V_MOE
-
-	JSR _ETERROR2
+	LSR
+	LSR
+	LSR
+	STA V_NIBBLE+0
+	PLA
+	AND #%00001111
+	STA V_NIBBLE+1
 	RTS
-@3P
-	LDA #12
-	SEC
-	SBC V_WEEK
-	STA V_MOE
-	JSR _ETERROR2
+	
+;reset_visit_bonus()
+_RESETVB
+	LDA C_VBONUS
+	STA V_VBONUS
 	RTS
-
