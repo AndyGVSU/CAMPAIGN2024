@@ -235,7 +235,13 @@ _SCHCLR
 
 ;execute_schedule() 
 ;adds the precalc'd variables to CP/health/funds
-_SCHEXE 
+_SCHEXE
+	+__LAB2O V_VISLOG
+	LDX V_PARTY
+	LDY #STATE_C-1
+	JSR _OFFSET
+	+__O2O2
+	
 	LDA #00
 	TAX 
 	STA C_SCHEDC
@@ -289,6 +295,15 @@ _SCHEXE
 	RTS 
 ;A = set state, load cp gain, add to state, inc ptr
 _SCHEXE2 
+	TAY
+	DEY
+	LDA (OFFSET2),Y ;add to visit log
+	CLC
+	ADC #$01
+	STA (OFFSET2),Y
+	INY
+	TYA
+	
 	JSR _CPOFFS
 	LDX V_CPGPTR
 	LDA V_CPGAIN,X
@@ -307,8 +322,6 @@ _CALCFND
 	RTS 
 
 ;calc_rest() 
-
-
 _CALCZZ 
 	LDA V_PARTY
 	JSR _CTRLCNT
@@ -433,14 +446,26 @@ _CALCVIS
 	JSR _CPADD ;health / 32
 	JSR _CISSUEB ;issue bonus
 @COST ;if we get to this point, there was a CP gain
-	;event handling
+	LDA FRET1
+	LSR 
+	STA FRET2
+	LSR 
+	CLC 
+	ADC FRET3
+	ADC V_TRAVEL ;travel cost
+	STA FRET3
+
+	JSR _HFNEG
+	JSR _STPCHF
+	
+	;event handling -- independent of costs
 	LDY FARG1
 	LDA #EV_FAIR
 	JSR _EVENTON
 	BNE @PLUS4
 	LDA FRET1
 	CLC
-	ADC #$04
+	ADC #EV_BONUSCP
 	STA FRET1
 @PLUS4
 	LDY FARG1
@@ -453,19 +478,7 @@ _CALCVIS
 	LDA FRET1
 	LDX FARG1
 	JSR _STPCCP
-	;warning if CP gain < 10
-;@NOWARN
-	LSR 
-	STA FRET2
-	LSR 
-	CLC 
-	ADC FRET3
-
-	ADC V_TRAVEL ;travel cost
-	STA FRET3
-
-	JSR _HFNEG
-	JSR _STPCHF
+	
 	RTS 
 @WARNING 
 	LDA #$01
@@ -551,8 +564,9 @@ _CALCTV
 	LDA #EV_TVADS
 	JSR _EVENTON
 	BNE @PLUS
-	LDA #04
+	LDA #EV_BONUSCP
 	JSR _CPADD
+	DEC FVAR2 ;-1 cost for the added free 8 CP 
 @PLUS
 	LDA FRET1
 	LSR
@@ -572,7 +586,7 @@ _CALCTV
 	CMP HIGHSTATE
 	BNE @LOOP
 	
-	LDA #10 ;flat cost of 10 HEALTH
+	LDA #16 ;flat cost HEALTH
 	STA FRET2
 	LDA FVAR2
 	CLC 
@@ -733,14 +747,14 @@ _STPCCP
 	
 ;schedule_save()
 ;saves scheduled actions by week/candidate
-_SCHSAV
+_SCHSAV	
 	+__LAB2O V_SCHIST
 	LDX V_WEEK
 	DEX
-	LDY #28
+	LDY #PLAYERMAX*ACTIONMAX
 	JSR _OFFSET
 	LDX V_PARTY
-	LDY #07
+	LDY #ACTIONMAX
 	JSR _OFFSET
 	
 	LDY #00
@@ -748,7 +762,7 @@ _SCHSAV
 	LDA C_SCHED,Y
 	STA (OFFSET),Y
 	INY
-	CPY #$07
+	CPY #ACTIONMAX
 	BNE @LOOP
 	RTS
 
@@ -949,4 +963,9 @@ _INITFH
 	LDA C_MONEY
 	STA V_FHCOST+1
 	RTS
-
+	
+;reset_visit_bonus()
+_RESETVB
+	LDA C_VBONUS
+	STA V_VBONUS
+	RTS

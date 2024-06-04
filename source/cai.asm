@@ -323,10 +323,17 @@ _AIHLIST
 	JSR _HSOFFS2
 	LDA FARG1
 	JSR _CPOFFS ;for issue bonus only
+	
+	JSR _MAXR
 	JSR _COPYLEAN
+	JSR _LEANTOMAX
+	JSR _MAX2
 	LDY V_PARTY
 	LDA V_LEAN,Y
-	ASL
+	SEC
+	SBC MAXLOW ;SL value = (15 + [for state] (my SL - max SL))
+	CLC
+	ADC #$0F
 	STA FVAR1 ;total
 	
 	LDX FARG1
@@ -344,6 +351,22 @@ _AIHLIST
 	LSR
 	CLC
 	ADC FVAR1
+	STA FVAR1
+	
+	+__LAB2O V_VISLOG
+	LDX V_PARTY
+	LDY #STATE_C-1
+	JSR _OFFSET
+	LDY FARG1
+	DEY
+	LDA FVAR1
+	SEC 
+	SBC (OFFSET),Y
+	SBC (OFFSET),Y
+	BCS @CARRY
+	LDA #00
+@CARRY
+	
 	LDX FAI
 	STA V_PRIOR,X
 @SKIPTV
@@ -378,15 +401,19 @@ _AIHLMULT
 	
 	JSR _AITVPRI
 	
+	;if normal AI or OVERKILL is true, ignore previous multipliers and just use EC / current control
+	LDX V_PARTY
+	LDA V_OVERKILL,X
+	BEQ @KEEPMULT
 	LDA SAVEAI
 	CMP #AIHARD1
-	BNE @CTRLONLY
+	BNE @KEEPMULT
 	LDA #00
 	STA FAIMUL
 	JSR _MULTEC
-	LDX V_AITVADS+2
+	LDX V_AITVADS+2 ;state control result
 	JSR _MULTCTRL3
-@CTRLONLY
+@KEEPMULT
 	
 	LDX FAI
 	LDA V_PRIOR,X
@@ -434,7 +461,7 @@ _AIHLMULT
 @DONE
 	JSR _AISORT
 	
-	;divide TV priorities by region's state count, then multiply by 100
+	;divide TV priorities by region's state count, then multiply by 10 to increase precision
 	LDA #01
 	STA FSTATE ;region
 @AVG
@@ -452,13 +479,8 @@ _AIHLMULT
 	JSR _162FAC
 	JSR _DIVIDE
 	JSR _FMUL10
-	JSR _FMUL10
 	JSR _FAC216
 	
-	CMP #00
-	BEQ @MAX
-	LDY #$FF
-@MAX
 	TYA
 	LDX FSTATE
 	CLC
@@ -637,9 +659,18 @@ _MULTLEAN
 @OK
 	LDX #02
 @DONE
+	LDA S_PARTISAN
+	CMP #$01
+	BEQ @HALF
+	CMP #$02
+	BEQ @RTS
 	LDA D_AI_LEAN,X
+	JMP @APPLY
+@HALF
+	LDA D_AI_LEAN2,X
+@APPLY
 	JSR _AIAPPLYM
-	
+@RTS
 	RTS
 
 ;helper function for multiplier functions (moves SL from history to V_MAX and runs MAX)
@@ -851,22 +882,6 @@ _AIPLURAL
 	CMP #$02
 	BCS @SUMLOOP
 @RTS
-	RTS
-	
-;sets first state to do POLL
-_AITOP
-	LDA V_PARTY
-	JSR _CANDLOAD
-	LDA C_HOME
-	LDX V_PARTY
-	STA V_AITOP,X
-	INC V_PARTY
-	LDA V_PARTY
-	CMP S_PLAYER
-	BNE _AITOP
-	LDA #00
-	STA V_PARTY
-	JSR _CANDLOAD
 	RTS
 
 

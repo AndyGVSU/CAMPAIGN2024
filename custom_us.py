@@ -17,7 +17,7 @@ inStateLean = []
 inIssues = []
 inEC = [0] * STATES
 
-print(inData.remove(inData[0]))
+inData.remove(inData[0])
 stateIndex = 0
 for line in inData:
     noNewLine = line[:-1]
@@ -36,7 +36,7 @@ lastString = fileBytes[modOffset+SIZE*2:]
 newString = ""
 for stateIndex in range(0,STATES):
     stateLeans = inStateLean[stateIndex]
-    newString += str(stateLeans[0])+str(stateLeans[1])
+    newString += format(int(stateLeans[0]),'01x')+format(int(stateLeans[1]),'01x')
 
 compress = ""
 for stateIndex in range(0,STATES):
@@ -57,7 +57,9 @@ campString = firstString + newString + lastString
 camp.close()
 customMap.close()
 
-camp = open(str(Path(sys.argv[1]+"mod")), "wb")
+tapeName = sys.argv[1][:-4]
+customName = sys.argv[2][:-4]
+camp = open(str(Path(tapeName+customName+".T64")), "wb")
 asBinary = bytes.fromhex(campString)
 camp.write(asBinary)
 camp.close()

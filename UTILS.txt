@@ -8,7 +8,7 @@ Allows a custom map (EC, STATE LEANS, ISSUES) to be modded into a CAMPAIGN MANAG
 
 Custom map format: (an original game map is included as an example)
 MAP NAME (this line is ignored)
-STATE 1 (ME): R LEAN, D LEAN, ISSUES, EC
+STATE 1 (ME): D LEAN, R LEAN, ISSUES, EC
 e.g. 7,9,2,3,5,5,4,4
 STATE 2...
 STATE 51 (HI)...

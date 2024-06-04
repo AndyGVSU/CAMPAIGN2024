@@ -248,9 +248,10 @@ V_STAFFOUT = $0A10+BASE2 ;staff out flag
 V_EVCDEAD = $0A11+BASE2 ;major scandal type: (0 = major, non-zero = dead)
 V_CPFLOAT = $0A24+BASE2 ;25B float values (5 parties * 5B)
 V_STRSTACK = $0A3D+BASE2 ;string stack (4B)
-V_CPGPTRO = $0A41+BASE2 ; saves offset for V_CPGAIN (7B)
+V_CPGPTRO = $0A41+BASE2 ;saves offset for V_CPGAIN (7B)
+V_CANDSEL = $0A48+BASE2 ;which map is displayed during candidate selection
+V_OVERKILL = $0A49+BASE2 ;per party, AI switches to GREED mode (4B)
 ;;
-V_4PREG = $0A72+BASE2 ;4p regional mode selected regions - 4B
 V_AIPLUR = $0A80+BASE2 ;ai state-to-plurality list (128B)
 
 BASE3 = $9000
@@ -365,7 +366,7 @@ V_POLDIV = $00F8+BASE3 ;poll count for region (temp)
 V_STRWAIT = $00F9+BASE3 ;string draw delay
 V_MAXPLI = $00FA+BASE3 ;V_MAXPL index
 V_PLURAL = $00FB+BASE3 ;floor(EC / player count) (2B)
-S_PARTISAN = $00FD+BASE3 ;PARTISAN setting (0 = high, 1 = medium, 2 = low)
+S_PARTISAN = $00FD+BASE3 ;PARTISAN setting (0 = default, 1 = half, 2 = quarter)
 V_FPNCHK = $00FE+BASE3 ;hold value for _FPNCHK
 V_POPWIN = $00FF+BASE3 ;winner of the popular vote (party index)
 
@@ -540,7 +541,6 @@ DBLOGBLOCK = $07
 FLOATLEN = $05
 PERCLEN = $05
 AISTATE = $3B
-;AISURVLEN = $06
 AIPLURLEN = $20
 PLAYERMAX = $04
 ACTIONMAX = $07
@@ -559,6 +559,7 @@ EV_ANARCHY = $09
 EV_POWER = $0A
 EV_PANDEMIC = $0B
 EV_TERROR = $0C
+EV_BONUSCP = $08
 
 EVCAND_C = $0D
 EVC_SCANDAL_NONE = $00
@@ -577,6 +578,7 @@ STAFF_COST = $0A
 HQ_COST = $05
 AI_MAX = $03
 CPGAIN_MAX = $4F
+SONGSIZE_MAX = $B2
 
 ACT_VISIT = $00
 ACT_TVADS = $01
@@ -625,7 +627,6 @@ DBCOAF = $FC
 DBCODS = $04
 DBCODF = $FC
 
-
 ;positional 
 P_TOP = $00
 P_LEFT = P_TOP
@@ -673,7 +674,7 @@ P_TITL2C = $06
 P_SETTR = $05
 P_SETTR2 = $0E
 P_INCUMR = $10
-P_INCUMC = P_RSELC
+P_INCUMC = P_RSELC-1
 P_AIMENR = $10
 P_AIMENC = P_RSELC2
 P_SCHEDR = $11
@@ -888,13 +889,13 @@ SPACE1 = NEWCHAR - _NEWCHARSET
 !source "source/CC64.asm" 
  
 T_BLANKX !hex 6070FE200B00 ;t_blankx: its repeat count is variable (edited during gameplay)
+T_FILLX !hex FE2F0000 ;t_fillx: like above, but with fill character and no preset color
 T_FTC !hex 6F2A4D204F5220535041434520544F20434F4E4649524D2A00
 T_SCHED !hex 53FF4DFF54FF57FF54FF46FF5300
 ;T_TITLE2 !hex 60 41 61 42 62 43 63 44 64 45 65 46 66 47 67 48 68 49 69 4A 6A 4B 6B 4C 6C 4D 6D 4E 6E 4F 6F 00 ;color test
 T_TITLE2 !hex 6F43414D504149474E204D414E4147455220643230323400
 T_99PC !hex 39392E393900
 T_00PC !hex 30302E303100
-;T_BLANK3 !hex 6070FE200300
 T_MONEY !hex 6C243A2000
 T_HEALTH !hex 4845414C54483A6AFE2D0800
 T_CONVEN !hex FE290AFF70434F4E56454E54494F4E00
@@ -944,6 +945,7 @@ T_EVENTC !hex 6D2A5350454349414C204E45575320414C455254212A00
 T_EVENTC2 !hex 6D54484520534954554154494F4E3A00
 T_EVENTC3 !hex 6D594F5552FF524553504F4E53453A00
 T_ISSUESTR !hex 6F495353554520535452454E4754483A00
+T_CANDSEL !hex 6F56494557204E455854FF53454C454354FF544F47474C454D415000
 
 ;large text files
 T_TITLE !binary "source/TEXTTITLEMENU3.dat"
@@ -972,7 +974,7 @@ T_DFINAL !binary "source/TEXTDEB10.dat"
 T_DLOG !binary "source/TEXTDEB11.dat"
 T_EVENTS !binary "source/TEXTEVENTS.dat"
 T_RATINGS !binary "source/TEXTRATINGS.dat"
-T_RATINGS2 !hex 504F4C4C5354455220524154494E47533A00
+T_RATINGS2 !hex 6D504F4C4C5354455220524154494E47533A00
 D_DRESLT !hex 001835556B829FC5D000EA ;offset table for debate action/reaction text (note PIVOT is used twice)
 D_DACODE !hex 171F28343C45505A
 D_DBACT !byte %00010000,%11011000,%10011000,%11111100,%10010100,%11011100,%01011000 ;debate action requirement bits: [CS, IC, OIC, CS mismatch penalty flag, IC..flag, OIC..flag, unused, unused] covers PIVOT through MORALIZE, and REACTION PIVOT is the last entry
@@ -1013,15 +1015,12 @@ D_REGC !hex 060305070904040805
 FVALUE1 !hex 8000000000
 D_INCCER !hex 0006030201FFFD
 D_INCFND !hex 0004020100FFFE
-;D_AI_NP !hex 0100FC
-;D_AI_NUN !hex 0003
 D_AI_CTRL !hex FC0102
-D_AI_EC !hex FD00
-;D_AI_CD !hex FC0001
+D_AI_EC !hex FE00
 D_AI_LEAN !hex FBFE00
+D_AI_LEAN2 !hex FEFF00
 D_AI_SWING !hex FF0102
 D_AITVADS !hex FF0302010303 ;CTRL table (self/opp/und) 1 ; CTRL table 2
-;D_DRWT2C !hex 09060F06
 D_MEGAST !hex 071E2631 ;NY/FL/TX/CA
 MEGASTAC = $04
 D_MEDSTA !hex 08090A0C0D191B1D2F
@@ -1029,11 +1028,11 @@ MEDSTAC = $09
 D_TV2REG !hex 030805040607010209
 D_ECHANCE !hex 102030405054585C ;5E6062 6466686A6C
 D_EADDR !16 _EREGION,_ESTATE,_ESTATE,_EREGION,_ESTATE,_ESRIGHT,_ESLEFT,_ESCENTER,_EANARCHY,_ETV,_EVISIT,_ETERROR,_EIMMIGRAT
-;D_EDRAW !hex 1221233344431101 ;event's draw type (half-bytes)
 D_UND !hex 0A1014
 D_CPLEVEL !hex 80C0E0F000
 D_ISSTBL !hex 020406080B
 D_ISSCOL !hex 020A0C0D05
+D_MOE !hex 050202
 
 D_C64COL !hex 00 02 06 04 05 0B 06 0E 09 08 0F 0A 05 07 0D 01
 T_DEBNET !hex 63434E4E0061464F58006250425300
@@ -1042,11 +1041,9 @@ D_DTOPIC !binary "source/DATATOPICISS.dat"
 D_DBAUDI !hex 0F191F
 D_DRCODE !hex 020B12
 D_HAIR !hex 20848588898a8b8c
-;D_4PREG !hex 0102040806070909 ;regions for 4p regional parties
-;D_4PREGL !hex 0709 ;leans for REGIONAL mode (non-home region lean, home region lean)
-;D_JOYSTICK !hex 494B4A4C4D
 D_FLOATCAP !hex 7AA3D70A00 ;00.01, where floating point numbers in C64 get formatted with scientific notation
 D_FLOATMAX !hex 87C8000000 ;100, the maximum floating point value
+;D_JOYSTICK !hex 494B4A4C4D
 ;KEYROW !byte $fe,$fd,$fb,$f7,$ef,$df,$bf,$7f
 ;KEYCOL !byte $01,$02,$04,$08,$10,$20,$40,$80		
 HISTV !byte $00
@@ -1060,6 +1057,7 @@ T_PLAYER !hex 504C4159455220202000
 V_POPVOTE = D_EXCHAR ;popular vote in plaintext (20B)
 V_REGISS = D_EXCHAR+20 ;issue bonus by region for a candidate (9B)
 V_DEADHOLD = D_EXCHAR+29 ;var hold for dead player (3B)
+V_VISLOG = D_EXCHAR+32 ;action per state per player (255B)
 
 _DATAEND
 DATASIZE = _DATAEND-DATA2024
@@ -1074,26 +1072,29 @@ SPACE2 = MUSIC - _DATAEND
 
 D_MUSIC !binary "source/song_base.dat" ;the common part of a music .bin file exported by GoatTracker
 _MUSICBASE
-!fill 256,$00
+!fill SONGSIZE_MAX,$00
 D_MUSD !binary "source/song_dem.dat" ;individual pieces
 D_MUSR !binary "source/song_rep.dat"
 D_MUSP !binary "source/song_pat.dat"
 D_MUSS !binary "source/song_soc.dat"
 D_MUSI !binary "source/song_ind.dat"
 _MUSICSIZE
-!16 D_MUSR-D_MUSD
-!16 D_MUSP-D_MUSR
-!16 D_MUSS-D_MUSP
-!16 D_MUSI-D_MUSS
-!16 _MUSICSIZE-D_MUSI
+!8 D_MUSR-D_MUSD
+!8 D_MUSP-D_MUSR
+!8 D_MUSS-D_MUSP
+!8 D_MUSI-D_MUSS
+!8 _MUSICSIZE-D_MUSI
+
+!source "source/CEXTRA.asm" 
+
 ;one-time data (ctd.)
 D_PARTY !binary "source/TEXTPNAME.dat" 
 WOR3 = D_PARTY+65
 IND3 = D_PARTY+54
 PAT3 = D_PARTY+21
-D_EC !binary "source/DATAECOLLEGE.dat"
 D_INITCP !binary "source/DATAINITCP.dat"
 D_ISSUE !binary "source/DATAISSUES.dat"
+D_EC !binary "source/DATAECOLLEGE.dat"
 
 _MUSICEND
 _MUSICTOTAL = _MUSICEND - MUSIC

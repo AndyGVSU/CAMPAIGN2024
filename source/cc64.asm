@@ -222,8 +222,6 @@ _SPRINIT
 	STA SPRPOS+2
 	LDA #$38
 	STA SPRPOS+3
-	LDA #00
-	LDY #$04
 	RTS
 
 ;draw_blank(A = count)
@@ -321,8 +319,45 @@ _UNIBBLE
 	STA V_NIBBLE+1
 	RTS
 	
-;reset_visit_bonus()
-_RESETVB
-	LDA C_VBONUS
-	STA V_VBONUS
+;3P_balance_lean()
+;giving 3P max SL of D/R is too powerful; it makes TV ADS too lucrative
+;so, a randomly selected half of 3P's non-megastates are nerfed by 1
+_3PBALANCE
+	LDY #00
+	LDX #00
+@MEGALP
+	LDA D_MEGAST,X
+	STA V_PRIORI,X
+	INX
+	CPX #MEGASTAC
+	BNE @MEGALP
+	
+	LDY #00 ;state list index
+@GENLOOP
+	JSR _RANDSTATE
+	
+	LDX #00 ;state list index 2
+@CHECKDUP
+	LDA V_PRIORI,X
+	BEQ @EMPTY
+	CMP FSTATE
+	BEQ @GENLOOP
+	INX
+	CPY #STATE_C/2
+	BNE @CHECKDUP
+	BEQ @DONE
+@EMPTY	
+	LDA FSTATE
+	STA V_PRIORI,X
+	JSR _CPOFFS
+	STY FY1
+	LDY #CPBLEAN+2
+	LDA (CP_ADDR),Y
+	SEC
+	SBC #01
+	STA (CP_ADDR),Y
+	LDY FY1
+	INY
+	JMP @GENLOOP
+@DONE
 	RTS

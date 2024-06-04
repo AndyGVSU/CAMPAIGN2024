@@ -53,7 +53,7 @@ _DETAIL
 	INC GX_CCOL
 	INC GX_CCOL
 	
-	+__LAB2XY T_RATINGS2+9
+	+__LAB2XY T_RATINGS2+10
 	JSR _GX_STR
 	
 	LDA #01
@@ -151,7 +151,7 @@ _DETAIL
 	LDX FRET1
 	JSR _DRWRATING2
  
-	JSR _GXINCRW
+	INC GX_CROW
 	INC V_WEEK
 	LDA V_WEEK
 	CMP #WEEKMAX+2
@@ -456,9 +456,9 @@ _CISSUEB
 	RTS 
 @LOOP 
 	LDA C_ISSUES,Y
-	CMP #08
+	CMP #ISSUEX
 	BEQ @ISSUEX
-	CMP #09
+	CMP #ISSUEN
 	BEQ @ISSUEN
 
 	LDA (IS_ADDR),Y
@@ -550,7 +550,7 @@ _DRWPOLL
 
 	LDA #P_POLLR
 	STA GX_CROW
-	JSR _GXINCRW
+	INC GX_CROW
 	LDA #P_POLLC
 	STA GX_CCOL
 
@@ -565,7 +565,7 @@ _DRWPOLL
 	STA GX_CIND
 	JSR _GX_CHAR
 	INC FVAR3
-	JSR _GXINCRW
+	INC GX_CROW
 	LDA FVAR3
 
 	CMP S_PLAYER ;loop per player
@@ -590,7 +590,7 @@ _DRWPOLL
 	STA GX_DCOL
 	LDA FSTATE
 	JSR _DRWPOST
-	JSR _GXINCRW
+	INC GX_CROW
 	LDA GX_LX1
 	STA GX_CCOL
 
@@ -613,7 +613,7 @@ _DRWPOLL
 	STA V_FPOINT+2
 	+__LAB2XY V_FPOINT
 	JSR _GX_STR
-	JSR _GXINCRW
+	INC GX_CROW
 	LDA GX_LX1
 	STA GX_CCOL
 
@@ -622,7 +622,7 @@ _DRWPOLL
 	CMP S_PLAYER ;loop per player
 	BCC @PLAYLOOP
 @PLDONE 
-	JSR _GXINCRW
+	INC GX_CROW
 
 	LDA GX_LX1
 	CLC 
@@ -674,7 +674,7 @@ _SAVEHIS
 	CPX #CPBLOCK
 	BNE @PACKSL
 	
-	LDX FSTATE
+	LDX CPSTATE
 	LDA V_NEGLECT,X
 	STA (HS_ADDR),Y
 	
@@ -907,7 +907,7 @@ _MAXEC
 ;popular_vote_sum(FARG5 = state count)
 ;awards ((EC-2) * state percent) for each state to each party
 ;calculates and stores total popular vote per party
-_POPSUM2
+_POPSUM
 	LDA #00
 	LDX #00
 @CLEAR
@@ -1104,7 +1104,7 @@ _CTRLCNT
 _POPCMB1
 	LDA V_PARTY
 	BNE @SKIP
-	JSR _POPSUM2 ;only ever done at the start of a WEEK
+	JSR _POPSUM ;only ever done at the start of a WEEK
 @SKIP
 	LDA S_SKIPGAME
 	BNE @RTS
@@ -1121,7 +1121,15 @@ _POPCMB2
 	STA FARG5
 	JSR _POPCMB1
 	RTS
-	
+
+;popsum_draw_combo_3()
+;POPSUM for all states
+_POPCMB3
+	LDA #STATE_C
+	STA FARG5
+	JSR _POPSUM
+	RTS
+
 ;candidate_display_loop() 
 ;shows all candidates
 _CANDLOOP 
@@ -1588,9 +1596,7 @@ _ATTRACT
 	LDA FVAR3
 	STA V_TITLANIM+0
 
-	LDA #STATE_C
-	JSR _RNG
-	STA FSTATE
+	JSR _RANDSTATE
 @REROLL
 	LDA #$0F
 	JSR _RNG
@@ -1625,9 +1631,7 @@ _FINALCP
 	STA V_POLLON
 	STA V_SUMFH
 	
-	LDA #STATE_C
-	STA FARG5
-	JSR _POPSUM2
+	JSR _POPCMB3
 	JSR _FLOATMAX
 	STA V_POPWIN
 	
@@ -1825,7 +1829,7 @@ _RESULTS
 	LDA C_CREG
 	JSR _DRWREGS
 	JSR _DRWWIN
-	JSR _POPSUM2
+	JSR _POPSUM
 	JSR _SUMEC
 	JSR _DRWPOP2
 	LDX C_CREG
@@ -1906,6 +1910,7 @@ _ISSUES2
 
 ;load_control(X = state index)
 _LDACTRL
+	;COMMENT THE NEXT 2 LINES TO VIEW AI BEHAVIOR
 	LDA V_POLLON
 	BEQ @CTRL
 	LDA V_POLLMAP,X
@@ -1987,7 +1992,7 @@ _INITEC
 	RTS 
 	
 ;partisan_float_calculation()
-;calculates and stores (1 / ((S_PLAYER-2) * S_PARTISAN))
+;calculates and stores (1 / ((player count - 2) * S_PARTISAN))
 _PRTFCALC
 	LDA #00
 	LDY #01
@@ -2066,6 +2071,7 @@ _SWINGCT
 	LSR
 	LSR
 	LSR
+	LSR
 	CLC
 	ADC #01
 	CMP #ACTIONMAX+1
@@ -2077,7 +2083,7 @@ _SWINGCT
 	
 ;domination_check()
 ;if a state's winner has controlled it (had a margin > 0) for the entire game, +1 SL
-;if a candidate has won in a V_LANDSLIDE, +1 SL to all states
+;if a candidate has won in a V_LANDSLIDE, +5 SL to all states they won
 _DOMCHECK
 	JSR _SUMEC
 	JSR _CPOFFR
@@ -2120,7 +2126,7 @@ _DOMCHECK
 	BEQ @LANDSLIDE
 	DEX
 	STX FX1
-	LDX FSTATE
+	LDX CPSTATE
 	LDA V_CTRL,X ;get state's winner
 	CMP FX1
 	BNE @LANDSLIDE

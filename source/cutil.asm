@@ -233,15 +233,15 @@ _PERCTRUNC2
 
 ;arg_to_float3() 
 ;transfers ARG to FLOAT3
-_ARG2F3 
-	LDX #00
-@LOOP 
-	LDA ARG,X
-	STA V_FLOAT3,X
-	INX 
-	CPX #FLOATLEN
-	BNE @LOOP
-	RTS 
+; _ARG2F3 
+	; LDX #00
+; @LOOP 
+	; LDA ARG,X
+	; STA V_FLOAT3,X
+	; INX 
+	; CPX #FLOATLEN
+	; BNE @LOOP
+	; RTS 
 ;float3_to_arg() 
 _F32ARG 
 	LDX #00
@@ -505,6 +505,52 @@ _RNG
 	BCS @REROLL
 	CMP #$00
 	RTS 
+_COINFLIP
+	LDA #02
+	JSR _RNG
+	RTS
+
+;random_state()
+;generates a random state and returns to A/FSTATE
+_RANDSTATE
+	LDA #STATE_C-1
+	JSR _RNG
+	CLC
+	ADC #$01
+	STA FSTATE
+	RTS
+	
+;random_medium_state()
+;generates a random medium state and returns to A
+_RANDMEDSTA	
+	LDA #MEDSTAC
+	JSR _RNG
+	TAX
+	LDA D_MEDSTA,X
+	RTS
+	
+;random_megastate()
+;generates a random megastate and returns to A
+_RANDMEGAST
+	LDA #MEGASTAC
+	JSR _RNG
+	TAX
+	LDA D_MEGAST,X
+	RTS
+	
+;state_is_medium_state(FSTATE = state)
+;returns whether state is a medium state
+_ISMEDSTA
+	
+;clears the visit log
+_CLRVISLOG
+	LDX #00
+	TXA
+@LOOP
+	STA V_VISLOG,X
+	INX
+	BNE @LOOP
+	RTS
 
 ;int(x(L),a(U)) 
 ;converts value to decimal INT, stores to string
@@ -701,8 +747,7 @@ _PLAYIN3
 
 ;copy(farg1,farg2,farg3,farg4,farg5) 
 ;copies [length farg5] $(2,1) to $(4,3)
-_COPY 
-	LDX #00
+_COPY
 	LDY #00
 @LOOP 
 	LDA (FARG1),Y

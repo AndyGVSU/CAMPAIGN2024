@@ -83,6 +83,7 @@ _GX_STR_NW
 	
 	LDA #00
 	STA GX_STRC
+	TAY
 	
 	LDA GX_CCOL
 	STA GX_SCOL
@@ -90,7 +91,6 @@ _GX_STR_NW
 	LDA GX_DCOL
 	STA GX_PCOL
 	
-	LDY #00
 @LOOP 
 	JSR _STRWAIT
 	LDY GX_STRC
@@ -103,7 +103,7 @@ _GX_STR_NW
 	BNE @STRREP
 	LDA GX_SCOL
 	STA GX_CCOL
-	JSR _GXINCRW
+	INC GX_CROW
 	JMP @LOOP
 @STRREP 
 	CMP #REPCHAR
@@ -154,7 +154,7 @@ _GX_STR_NW
 	CMP #PARTYCHAR
 	BCC @STRISSUE
 	JSR _GX_STRPUSH
-	LDA V_PARTY
+	LDX V_PARTY
 	JSR _DRWPN3
 	JSR _GX_STRPULL
 	JMP @LOOP
@@ -196,7 +196,7 @@ _GX_STR2
 	JSR _GX_CHAR
 	INC GX_CCOL
 	RTS 
-;will move at most one string to scratch for special characters
+;will move at most one string to storage (for special characters only)
 _GX_STRPUSH
 	LDA GX_STRC
 	STA V_STRSTACK
@@ -276,12 +276,6 @@ _GXRECTC
 	LDA #C_BLACK
 	STA GX_DCOL
 	JSR _GX_RECT
-	RTS 
-
-;gx_increment_row() 
-;increments row by one standard character
-_GXINCRW 
-	INC GX_CROW
 	RTS 
 
 ;draw_space()

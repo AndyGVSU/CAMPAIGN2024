@@ -198,8 +198,7 @@ _EDRAW
 ;assigns an event to a given state, not repeating
 _ESTATE
 	;1/2 chance to select megastate or medium state
-	LDA #$02
-	JSR _RNG
+	JSR _COINFLIP
 	BEQ @RAND
 	LDA #$00
 	STA FARG3
@@ -207,11 +206,7 @@ _ESTATE
 	STA FSTATE
 	JMP @SELECTED
 @RAND
-	;select random state
-	LDA #STATE_C-1
-	JSR _RNG
-	STA FSTATE
-	INC FSTATE
+	JSR _RANDSTATE
 @SELECTED	
 	LDX #00
 @LOOP
@@ -555,22 +550,15 @@ _EECD
 	RTS
 ;picks a medium or megastate (FARG3 = state to not repeat)
 _EECD2
-	LDA #$02
-	JSR _RNG ;half chance for a mega or medium state
+	JSR _COINFLIP ;half chance for a mega or medium state
 	BNE @MEGA
 	
-	LDA #MEGASTAC
-	JSR _RNG
-	TAX
-	LDA D_MEGAST,X
+	JSR _RANDMEGAST
 	CMP FARG3
 	BEQ _EECD2
 	JMP @CHOOSE
 @MEGA
-	LDA #MEDSTAC
-	JSR _RNG
-	TAX
-	LDA D_MEDSTA,X
+	JSR _RANDMEDSTA
 	CMP FARG3
 	BEQ _EECD2
 @CHOOSE
@@ -894,6 +882,10 @@ _EVCGLOW
 	STA EVCCOST
 	JSR _EVCCMBC
 	BEQ @NO
+	LDA C_MONEY
+	CLC
+	ADC EVCCOST
+	STA C_MONEY
 	LDA #04
 	JSR _RNG
 	CLC
@@ -928,9 +920,7 @@ _EVCIVAN
 	RTS
 	
 _EVCLOCK
-	LDA #STATE_C
-	JSR _RNG
-	STA FSTATE
+	JSR _RANDSTATE
 	LDA #20
 	STA EVCCOST
 	JSR _EVCCMBC
@@ -1038,11 +1028,9 @@ _EVCSTAFF
 	
 _EVCVP
 @REROLLST
-	LDA #STATE_C
-	JSR _RNG
+	JSR _RANDSTATE
 	CMP C_VP
 	BEQ @REROLLST
-	STA FSTATE
 	JSR _EVCCMB
 	BEQ @NO
 	LDY C_VP
@@ -1055,7 +1043,7 @@ _EVCVP
 	LDA FSTATE
 	JSR _CPOFFS
 	
-	LDA #08
+	LDA #16
 	STA FRET1
 	JSR _CPADD
 	
