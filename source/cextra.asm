@@ -33,3 +33,15 @@ _AITOP
 	STA V_PARTY
 	JSR _CANDLOAD
 	RTS
+	
+;draw_blank(A = count)
+_DRWBLANK
+    STA T_BLANKX+4
+    +__LAB2XY T_BLANKX
+    JSR _GX_STR
+	RTS
+
+
+
+
+

@@ -638,7 +638,7 @@ _INPUTF3
 	RTS
 	
 ;player_name_input() 
-_PLAYINP 
+_NAMEINP 
 	JSR _CLRFP
 	LDA #00
 	STA FVAR1 ;cursor pos
@@ -651,7 +651,7 @@ _PLAYINP
 	LDA #C_WHITE
 	STA GX_DCOL
 	STA FVAR2 ;party color
-	JSR _PLAYIN2
+	JSR _NAMEIN2
 
 @GETINP 
 	LDA FVAR2
@@ -668,12 +668,12 @@ _PLAYINP
 @DRAW 
 	STA GX_CIND
 	LDX FVAR1
-	STA V_FPOINT,X ;used for string temp
+	STA V_SETTEMP,X ;used for string temp
 	JSR _GX_CHAR
 	INC GX_CCOL
 	INC FVAR1
 
-	JSR _PLAYIN2
+	JSR _NAMEIN2
 
 	LDA FVAR1
 	CMP #NAMELEN-1
@@ -690,13 +690,13 @@ _PLAYINP
 	DEC FVAR1
 	DEX 
 	LDA #$20
-	STA V_FPOINT,X
-	JSR _PLAYIN2
+	STA V_SETTEMP,X
+	JSR _NAMEIN2
 	JMP @GETINP
 @PPROC 
-	JSR _PLAYIN3
+	JSR _NAMEIN3
 	;do postproccessing
-	LDA V_FPOINT
+	LDA V_SETTEMP
 	BEQ @PLAYVER ;no empty name
 
 	CMP #$20 ;no leading space
@@ -710,7 +710,7 @@ _PLAYINP
 	LDX #00
 	LDY #00
 @CLOOP 
-	LDA V_FPOINT,X
+	LDA V_SETTEMP,X
 	STA (OFFSET),Y
 	INX 
 	INY 
@@ -727,16 +727,16 @@ _PLAYINP
 
 	JSR _FTC
 	BEQ @DONE
-	JMP _PLAYINP ;reinput if denied
+	JMP _NAMEINP ;reinput if denied
 @DONE 
 	RTS 
 ;draw cursor
-_PLAYIN2 
+_NAMEIN2 
 	LDA #FILLCHR
 	STA GX_CIND
 	JSR _GX_CHAR ;draw cursor
 	INC GX_CCOL
-_PLAYIN3 
+_NAMEIN3 
 	LDA #C_BLACK
 	STA GX_DCOL
 	LDA #$20
@@ -793,8 +793,6 @@ _CLRFP
 @CLRLOOP 
 	STA V_FPOINT,X
 	INX 
-
-
 	CPX #$09
 	BNE @CLRLOOP
 	RTS 
@@ -1068,8 +1066,35 @@ _NIBBLE
 	ORA V_NIBBLE+1
 	RTS
 	
-
-
-
+;unpack_nibble(V_NIBBLE+0)
+;unpacks two 4-bit values
+;returns to V_NIBBLE+0, V_NIBBLE+1
+_UNIBBLE
+	LDA V_NIBBLE
+	PHA
+	AND #%11110000
+	LSR
+	LSR
+	LSR
+	LSR
+	STA V_NIBBLE+0
+	PLA
+	AND #%00001111
+	STA V_NIBBLE+1
+	RTS
+	
+;copies V_MAX1B to V_MAX
+_MAX1B
+	LDX #00
+	LDY #00
+@LOOP
+	LDA V_MAX1B,X
+	STA V_MAX+1,Y
+	INX
+	INY
+	INY
+	CPX #$04
+	BNE @LOOP
+	RTS
 
  

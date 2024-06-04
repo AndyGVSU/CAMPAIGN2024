@@ -1927,7 +1927,7 @@ _DRWSETG
 	STA FVAR1 ;option count
 @LOOP
 	LDX FVAR1
-	LDA V_FLOAT3,X
+	LDA V_SETTEMP,X
 	JSR _DRWSIGN
 	DEC GX_CCOL
 	INC GX_CROW
@@ -1991,9 +1991,10 @@ _INITEC
 	JSR _COPY
 	RTS 
 	
-;partisan_float_calculation()
-;calculates and stores (1 / ((player count - 2) * S_PARTISAN))
-_PRTFCALC
+;map_settings_calculations()
+;calculates and stores (1 / ((player count - 2) * rating strength multiplier))
+;sets V_UND to needed result
+_MAPSETCALC
 	LDA #00
 	LDY #01
 	JSR _162FAC
@@ -2006,7 +2007,7 @@ _PRTFCALC
 	SEC
 	SBC #01
 	TAX
-	LDY S_PARTISAN
+	LDY S_RATINGSTR
 	INY
 	JSR _OFFSET
 	
@@ -2020,6 +2021,16 @@ _PRTFCALC
 	LDA V_INCPERC+1
 	AND #%01111111
 	STA V_INCPERC+1
+	
+	LDA #00
+	CLC
+	LDY S_UNDPERC
+@ADDLOOP
+	LDX S_PLAYER
+	ADC D_UND-2,X
+	DEY
+	BNE @ADDLOOP
+	STA V_UNDPERC
 	RTS
 
 ;checks if every player is an AI	

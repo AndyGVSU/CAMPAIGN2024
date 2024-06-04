@@ -223,13 +223,6 @@ _SPRINIT
 	LDA #$38
 	STA SPRPOS+3
 	RTS
-
-;draw_blank(A = count)
-_DRWBLANK
-    STA T_BLANKX+4
-    +__LAB2XY T_BLANKX
-    JSR _GX_STR
-	RTS
 	
 ;yes_or_no()
 ;displays a yes or no prompt
@@ -286,37 +279,6 @@ _TABLJSR
 @TEST	
 	;execute
 	JSR $0000
-	RTS
-	
-;copies V_MAX1B to V_MAX
-_MAX1B
-	LDX #00
-	LDY #00
-@LOOP
-	LDA V_MAX1B,X
-	STA V_MAX+1,Y
-	INX
-	INY
-	INY
-	CPX #$04
-	BNE @LOOP
-	RTS
-	
-;unpack_nibble(V_NIBBLE+0)
-;unpacks two 4-bit values
-;returns to V_NIBBLE+0, V_NIBBLE+1
-_UNIBBLE
-	LDA V_NIBBLE
-	PHA
-	AND #%11110000
-	LSR
-	LSR
-	LSR
-	LSR
-	STA V_NIBBLE+0
-	PLA
-	AND #%00001111
-	STA V_NIBBLE+1
 	RTS
 	
 ;3P_balance_lean()
