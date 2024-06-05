@@ -1844,6 +1844,8 @@ _RESULTS
 
 	RTS 
 	
+;uncompress_issues()
+;issues are stored on tape as compressed 3-bit values and then uncompressed into memory
 _ISSUES 
 	+__LAB2A2 V_ISSUE,D_ISSUE
 	LDA #00
@@ -1872,7 +1874,7 @@ _ISSUES
 @CARRY2 
 	INC FARG5
 	LDA FARG5
-	CMP #STATE_C
+	CMP #32 ;each run of _ISSUES2 fills 8B (24 is the first common demoninator of 3 and 8); 8*32 = 255B
 	BNE @TOP
 	RTS 
 ;3-hex decompress (A=VAL,first bit in arg5)

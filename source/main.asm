@@ -234,39 +234,39 @@ V_AISTATC = $003F+BASE2_5 ;carry (1B)
 V_CPGAIN = $0040+BASE2_5 ;precalc CP gain (max of 7 actions * 9 states from largest region = 63B)
 V_PRIOR = $0080+BASE2_5 ;hard AI priority list (64B): 50 states + 9 TV ADS
 V_PRIORI = $00C0+BASE2_5 ;hard AI priority list state INDEX (64B)
-
+;STATE DATA CTD. + CANDIDATE DATA
 BASE2_4 = BASE2_5 + $0100
 V_PNAME = $0000+BASE2_4 ;player name (40B)
-V_PRIMRY = $0028+BASE2_4 ;current primary candidate (16B)
-V_FHCOST = V_PRIMRY ;precalc funds/health ^
+V_FHCOST = $0028+BASE2_4 ;precalc funds/health (16B) 
 V_FIXPERC = $0038+BASE2_4 ;fixed percentage floats (4 players * 5B) = (20B)
 V_MAX = $004C+BASE2_4 ;4 pairs of LB/HB for comparison (8B)
 V_FPOINT = $0054+BASE2_4 ;multiuse for percentage strings (9B)
 V_FLOAT3 = $005D+BASE2_4 ;extra float value (5B)
 V_LEAN = $0062+BASE2_4 ;state lean holding area (4B)
-V_TIERES = $0066+BASE2_4 ;tiebreaker index by state (51B)
-V_POLLMAP = $0099+BASE2_4 ;map CTRL values for POLL (51B)
-V_ETABLE = $00CC+BASE2_4 ;event table by state (51B)
-
+V_TIERES = $0066+BASE2_4-$0001 ;tiebreaker index by state (51B)
+V_POLLMAP = $0099+BASE2_4-$0001 ;map CTRL values for POLL (51B)
+V_ETABLE = $00CC+BASE2_4-$0001 ;event table by state (51B)
+;ISSUES
 BASE2_3 = BASE2_4 + $0100
 V_ISSUE = BASE2_3 ;issue values by state (5 issues * 51 states = 255B)
-
+;STATE DATA -- offset by 1 because state index starts at 1
 BASE2_2 = BASE2_3 + $0100
-V_HQ = $0000+BASE2_2 ;HQ per party per state, in bit-pairs (aabbccdd) (51B)
-V_STCOL = $0033+BASE2_2 ;displayed map color values (51B)
-V_REVERT = $0066+BASE2_2 ;per state (51B)
-V_EC = $0099+BASE2_2 ;EC by state (51B)
-V_COLMSK = $00CC+BASE2_2 ;flag to mask drawing the color of a state (51B)
-
+V_HQ = $0000+BASE2_2-$0001 ;HQ per party per state, in bit-pairs (aabbccdd) (51B)
+V_STCOL = $0033+BASE2_2-$0001 ;displayed map color values (51B)
+V_REVERT = $0066+BASE2_2-$0001 ;per state (51B)
+V_EC = $0099+BASE2_2-$0001 ;EC by state (51B)
+V_COLMSK = $00CC+BASE2_2-$0001 ;flag to mask drawing the color of a state (51B)
+;CANDIDATE / AI PLURALITY LIST
 BASE2_1 = BASE2_2 + $0100
 V_ALLCND = $0000+BASE2_1 ;candidate data for current game (#CANDDATA * 4 = 128B)
 V_AIPLUR = $0080+BASE2_1 ;ai state-to-plurality list (128B)
-
-BASE2_0 = BASE2_1 + $0200
+V_PRIMRY = V_AIPLUR ;all primary candidates (16*8 = 128B) ^ 
+;CP BLOCK (double block)
+BASE2_0 = BASE2_1 + $0100
 V_CP = $0000+BASE2_0 ;CP and STATE LEANS by state per party (4*2*51B = 408B)
 V_NEGLECT = $0198+BASE2_0 ;NEGLECT consecutive week count by state (51B)
 V_CTRL = $01CB+BASE2_0 ;map party control values (who is winning a state, or UND) (51B)
-
+;VARIABLE BLOCK
 BASE3 = $9000
 VISSAVE = $0000+BASE3 ;VISIT selection save
 V_AITVADS = $0001+BASE3 ;holds swing state / state lean / state control multiplier outcomes (3B)
@@ -543,7 +543,8 @@ UND_PRTY = $04
 STATE_C = $34
 REGION_C = $09
 PRIMC1L = $07
-PRIMARYC = $08
+CANDSTATC = $05
+PRIMARYC = $07
 PRIMDATC = $11
 NAMELEN = $0A
 PARTYNAMELEN = $0B
