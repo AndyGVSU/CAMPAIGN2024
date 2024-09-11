@@ -160,100 +160,110 @@ JOYDEF1 = $FF
 _SCNKEY = $FF9F
 _GETIN = $FFE4
 
-BASE2 = $8500
-V_HQ = $0000+BASE2 ;HQ per party per state, in bit-pairs (aabbccdd)
-SCRATCH = $0034+BASE2
-V_DBLOG = $0178+BASE2; (84B)
-V_POLLMAP = $01CC+BASE2 ;map CTRL values for POLL
 ;camp2024 addresses
-V_CP = $0200+BASE2 ;CP and STATE LEANS by state per party (4*2*51B = 408B)
-V_NEGLECT = $0398+BASE2 ;NEGLECT consecutive week count by state (51B)
-V_CTRL = $03CB+BASE2
-V_STCOL = $0400+BASE2
-;V_CPCAP = $0434+BASE2
-V_TIERES = $0468+BASE2
-V_COLMSK = $049C+BASE2
-V_ISSUE = $0500+BASE2
-V_ALLCND = $0600+BASE2
-V_EC = $0685+BASE2
-V_FPOINT = $06C0+BASE2
-V_FLOAT3 = $06F8+BASE2
-V_PRIMRY = $0700+BASE2
-V_FHCOST = V_PRIMRY
-V_CPGAIN = $0710+BASE2
-V_PNAME = $07A0+BASE2 ;(40B)
-V_ETABLE = $07C8+BASE2 ;event table (51B)
-V_PRIOR = $0800+BASE2 ;hard AI priority list (64B): 50 states + 9 TV ADS
-V_PRIORI = $0840+BASE2 ;hard AI priority list state INDEX (64B)
-;;
-V_AISTAT = $08B0+BASE2 ;hard AI used for [STATE LEAN averaged by region list] or [list of region states] (9B)
-V_MAX = $08C0+BASE2 ;8B (4 pairs of LB/HB)
-V_EVENPERC = $08C8+BASE2 ;fixed percentage even share (100 - UND%) / S_PLAYER
-V_UNDPERC = $08C9+BASE2 ;UND%
-V_EVENPERCST = $08CA+BASE2 ;fixed percentage even share with state's NEGLECT (V_EVENPERCST + (NEGLECT / S_PLAYER))
-V_LEANT = $08CB+BASE2 ;for summing STATE LEANS
-V_INCPERC = $08CC+BASE2 ;multiplier for STATE LEANS (5B)
-V_FIXPERC = $08D1+BASE2 ;fixed percentage floats (4 players * 5B) = 20B
-V_POLLON = $08E5+BASE2 ;boolean - POLL has been done for current player this WEEK
-V_INCDUBL = $08E6+BASE2 ;flag to double V_INCPERC
-;V_ADDCP3P = $08E7+BASE2 ;counter for current party in _CPADD3
-V_LEAN = $08E8+BASE2 ;state lean holding area (4B)
-V_PARTYH = $08EC+BASE2 ;holds V_PARTY temp
-V_RANDCP = $08ED+BASE2 ;boolean - add random factor to state CP
-V_AISTATC = $08EE+BASE2 ;carry
-V_AIEC = $08EF+BASE2 ;ec sum (2B)
-V_HQBUILT = $08F1+BASE2 ;boolean HQ built this turn
-V_AIPOLC = $08F2+BASE2 ;hard AI region poll count
-V_PLURALF = $08F3+BASE2 ;V_PLURAL as float (5B)
-;;
-V_REVERT = $0900+BASE2 ;per state
-;V_LSTATE = $0934+BASE2
-V_DOMNGL = $0935+BASE2 ;DOMINATION/NEGLECT flags per state (51B) [abcdefgh], a = domination, b = neglect, 4 pairs for 4 players
-V_DACT = $0970+BASE2 ;debate action blocks (7B*4) [ACTION, ISSUE, SEL. OPPONENT, SUCCESS, REACTION, R. ISSUE, R. SUCCESS]
-V_DPCOUN = $098C+BASE2 ;debate penalty counts (4B)
-V_DDP = $0990+BASE2 ;debate DP totals (4B)
-V_DOPPON = $0994+BASE2 ;debate opponent list (3B)
-V_DPOBSC = $0997+BASE2 ;debate penalty obscured flags (4B)
-V_DDPQ = $099B+BASE2 ;debate question DP gain (4B)
-V_DOTHER = $09A0+BASE2 ;debate others issue values (4B)
-V_DPPREV = $09A4+BASE2 ;debate previous penalty flag (4B)
-V_DSTATE = $09A8+BASE2 ;debate selected states (3B)
-V_DPCURR = $09AB+BASE2 ;debate current penalty flags (4B)
-V_DPCLOG = $09AF+BASE2 ;debate penalty count log (12B)
-V_DNATL = $09CB+BASE2 ;debate total DP copy / nat'l bonus (4B)
-V_DTOPIC = $09CF+BASE2 ;debate selected topics (3B)
-V_DPHASE = $09D3+BASE2 ;debate phase (action/reaction)
-V_DISS0 = $09D4+BASE2 ;debate issue 0
-V_DISS1 = $09D5+BASE2 ;debate issue 1
-V_DQUEST = $09D6+BASE2 ;debate question index
-V_DISSUE = $09D7+BASE2 ;debate selected state issues + others (6B)
-V_DQSTAT = $09DD+BASE2 ;debate question state
-V_DCTV = $09DE+BASE2 ;debate current tv network
-V_DPRVTV = $09DF+BASE2 ;debate previous tv network
-V_DPCQAG = $09E0+BASE2 ;debate precalc question dp attacker (or passive) gain
-V_DPCQDG = $09E1+BASE2 ;debate precalc question dp defender gain
-V_DPERSNL = $09E2+BASE2 ;debate personal enabled
-V_MARGINF = $09E3+BASE2 ;holds margin float (5B)
-V_MAXHOLD = $09E8+BASE2 ;holds max2nd value + index (3B)
-V_FIXEDPERC = $09EB+BASE2 ;temp for _FIXEDPERC
-V_SCHEDC = $09EC+BASE2 ;holds schedule copy (8B)
-V_SCHED = $09ED+BASE2 ;..
-V_SCHEDVB = $09F4+BASE2 ;holds visit bonus by action (8B)
-V_AUTOSTAFF = $09FC+BASE2 ;no staff out flag by player (4B)
-V_STLOCK = $0A00+BASE2 ;per player -- locks 2 actions to schedule for one WEEK (4B)
-V_RALLYDEATH = $0A04+BASE2 ;region death-on-RALLY by player (4B)
-V_SCANDAL = $0A08+BASE2 ;scandal level by player (4B) -- 00 = none, 01 = minor, 10 = major (resign), 11 = major (death)
-V_WARP = $0A0C+BASE2 ;travel cost waived flag (4B)
-V_STAFFOUT = $0A10+BASE2 ;staff out flag
-V_EVCDEAD = $0A11+BASE2 ;major scandal type: (0 = major, non-zero = dead)
-V_CPFLOAT = $0A24+BASE2 ;25B float values (5 parties * 5B)
-V_STRSTACK = $0A3D+BASE2 ;string stack (4B)
-V_CPGPTRO = $0A41+BASE2 ;saves offset for V_CPGAIN (7B)
-V_CANDSEL = $0A48+BASE2 ;which map is displayed during candidate selection
-V_OVERKILL = $0A49+BASE2 ;per party, AI switches to GREED mode (4B)
-;;
-V_AIPLUR = $0A80+BASE2 ;ai state-to-plurality list (128B)
+BASE2 = $8800
+BASE2_6 = BASE2+$0000
+;;non-debate
+V_STLOCK = $0000+BASE2_6 ;per player -- locks 2 actions to schedule for one WEEK (4B)
+V_RALLYDEATH = $0004+BASE2_6 ;region death-on-RALLY by player (4B)
+V_SCANDAL = $0008+BASE2_6 ;scandal level by player: [00 = none, 01 = minor, 10 = major (resign), 11 = major (death)] (4B)
+V_WARP = $000C+BASE2_6 ;travel cost waived flag (4B)
+V_STAFFOUT = $0010+BASE2_6 ;staff out flag (1B)
+V_EVCDEAD = $0011+BASE2_6 ;major scandal type: [0 = major, non-zero = dead] (1B)
+V_STRSTACK = $0012+BASE2_6 ;string stack (4B)
+V_CPGPTRO = $0016+BASE2_6 ;saves offset for V_CPGAIN (7B)
+V_CANDSEL = $001D+BASE2_6 ;which map is displayed during candidate selection (1B)
+V_OVERKILL = $001E+BASE2_6 ;per party, AI switches to GREED mode (4B)
+V_AISTAT = $0022+BASE2_6 ;hard AI used for [STATE LEAN averaged by region list] or [list of region states] (9B)
+V_EVENPERC = $002B+BASE2_6 ;fixed percentage even share (100 - UND%) / S_PLAYER (1B)
+V_UNDPERC = $002C+BASE2_6 ;UND% (1B)
+V_EVENPERCST = $002D+BASE2_6 ;fixed percentage even share with state's NEGLECT (V_EVENPERCST + (NEGLECT / S_PLAYER)) (1B)
+V_LEANT = $002E+BASE2_6 ;for summing STATE LEANS (1B)
+V_INCPERC = $002F+BASE2_6 ;multiplier for STATE LEANS (5B)
+V_POLLON = $0034+BASE2_6 ;boolean - POLL has been done for current player this WEEK (1B)
+V_INCDUBL = $0035+BASE2_6 ;flag to double V_INCPERC (1B)
+V_PARTYH = $0036+BASE2_6 ;holds V_PARTY temp (1B)
+V_RANDCP = $0037+BASE2_6 ;boolean - add random factor to state CP (1B)
+V_AIEC = $0038+BASE2_6 ;ec sum (2B)
+V_HQBUILT = $003A+BASE2_6 ;boolean HQ built this turn (1B)
+V_AIPOLC = $003B+BASE2_6 ;hard AI region poll count (1B)
+V_AUTOSTAFF = $003C+BASE2_6 ;no staff out flag by player (4B)
+;debate
+V_DACT = $0040+BASE2_6 ;debate action blocks [ACTION, ISSUE, SEL. OPPONENT, SUCCESS, REACTION, R. ISSUE, R. SUCCESS] 7*4 = (28B)
+V_DPCOUN = $005C+BASE2_6 ;debate penalty counts (4B)
+V_DDP = $0060+BASE2_6 ;debate DP totals (4B)
+V_DOPPON = $0064+BASE2_6 ;debate opponent list (3B)
+V_DPOBSC = $0067+BASE2_6 ;debate penalty obscured flags (4B)
+V_DDPQ = $006B+BASE2_6 ;debate question DP gain (4B)
+V_DOTHER = $006F+BASE2_6 ;debate others issue values (4B)
+V_DPPREV = $0073+BASE2_6 ;debate previous penalty flag (4B)
+V_DSTATE = $0077+BASE2_6 ;debate selected states (3B)
+V_DPCURR = $007A+BASE2_6 ;debate current penalty flags (4B)
+V_DPCLOG = $007E+BASE2_6 ;debate penalty count log (12B)
+V_DNATL = $008A+BASE2_6 ;debate total DP copy / nat'l bonus (4B)
+V_DTOPIC = $008E+BASE2_6 ;debate selected topics (3B)
+V_DPHASE = $0091+BASE2_6 ;debate phase (action/reaction) (1B)
+V_DISS0 = $0092+BASE2_6 ;debate issue 0 (1B)
+V_DISS1 = $0093+BASE2_6 ;debate issue 1 (1B)
+V_DQUEST = $0094+BASE2_6 ;debate question index (1B)
+V_DISSUE = $0095+BASE2_6 ;debate selected state issues + others (6B)
+V_DQSTAT = $009B+BASE2_6 ;debate question state (1B)
+V_DCTV = $009C+BASE2_6 ;debate current tv network (1B)
+V_DPRVTV = $009D+BASE2_6 ;debate previous tv network (1B)
+V_DPCQAG = $009E+BASE2_6 ;debate precalc question dp attacker (or passive) gain (1B)
+V_DPCQDG = $009F+BASE2_6 ;debate precalc question dp defender gain (1B)
+V_DPERSNL = $00A0+BASE2_6 ;debate personal enabled (1B)
+V_DBLOG = $00A1+BASE2_6 ;(84B)
+V_FLOAT3 = $00F5+BASE2_6 ;extra float value (5B)
+;6B free for V_FLOAT3
 
+BASE2_5 = BASE2_6 + $0100
+V_CPFLOAT = $0000+BASE2_5 ;float values 5 parties * 5B float = (25B)
+V_SCHEDC = $0019+BASE2_5 ;holds schedule copy (8B)
+V_SCHED = $0021+BASE2_5 ;schedule (8B)
+V_SCHEDVB = $0029+BASE2_5 ;holds visit bonus by action (8B)
+V_MARGINF = $0031+BASE2_5 ;holds margin float (5B)
+V_MAXHOLD = $0036+BASE2_5 ;holds max2nd value + index (3B)
+V_FIXEDPERC = $0039+BASE2_5 ;temp for _FIXEDPERC (1B)
+V_PLURALF = $003A+BASE2_5 ;V_PLURAL as float (5B)
+V_AISTATC = $003F+BASE2_5 ;carry (1B)
+V_CPGAIN = $0040+BASE2_5 ;precalc CP gain (max of 7 actions * 9 states from largest region = 63B)
+V_PRIOR = $0080+BASE2_5 ;hard AI priority list (64B): 50 states + 9 TV ADS
+V_PRIORI = $00C0+BASE2_5 ;hard AI priority list state INDEX (64B)
+;STATE DATA CTD. + CANDIDATE DATA
+BASE2_4 = BASE2_5 + $0100
+V_PNAME = $0000+BASE2_4 ;player name (40B)
+V_FHCOST = $0028+BASE2_4 ;precalc funds/health (16B) 
+V_FIXPERC = $0038+BASE2_4 ;fixed percentage floats (4 players * 5B) = (20B)
+V_MAX = $004C+BASE2_4 ;4 pairs of LB/HB for comparison (8B)
+V_FPOINT = $0054+BASE2_4 ;multiuse for percentage strings (9B)
+V_FRINGE = $005D+BASE2_4 ;flag FRINGE by player (4B)
+V_VBONUSAMT = $0061+BASE2_4 ;CP netted by RALLY BONUS
+V_LEAN = $0062+BASE2_4 ;state lean holding area (4B)
+V_TIERES = $0066+BASE2_4-$0001 ;tiebreaker index by state (51B)
+V_POLLMAP = $0099+BASE2_4-$0001 ;map CTRL values for POLL (51B)
+V_ETABLE = $00CC+BASE2_4-$0001 ;event table by state (51B)
+;ISSUES
+BASE2_3 = BASE2_4 + $0100
+V_ISSUE = BASE2_3 ;issue values by state (5 issues * 51 states = 255B)
+;STATE DATA -- offset by 1 because state index starts at 1
+BASE2_2 = BASE2_3 + $0100
+V_HQ = $0000+BASE2_2-$0001 ;HQ per party per state, in bit-pairs (aabbccdd) (51B)
+V_STCOL = $0033+BASE2_2-$0001 ;displayed map color values (51B)
+V_REVERT = $0066+BASE2_2-$0001 ;per state (51B)
+V_EC = $0099+BASE2_2-$0001 ;EC by state (51B)
+V_COLMSK = $00CC+BASE2_2-$0001 ;flag to mask drawing the color of a state (51B)
+;CANDIDATE / AI PLURALITY LIST
+BASE2_1 = BASE2_2 + $0100
+V_ALLCND = $0000+BASE2_1 ;candidate data for current game (#CANDDATA * 4 = 128B)
+V_AIPLUR = $0080+BASE2_1 ;ai state-to-plurality list (128B)
+V_PRIMRY = V_AIPLUR ;all primary candidates (16*8 = 128B) ^ 
+;CP BLOCK (double block)
+BASE2_0 = BASE2_1 + $0100
+V_CP = $0000+BASE2_0 ;CP and STATE LEANS by state per party (4*2*51B = 408B)
+V_NEGLECT = $0198+BASE2_0 ;NEGLECT consecutive week count by state (51B)
+V_CTRL = $01CB+BASE2_0 ;map party control values (who is winning a state, or UND) (51B)
+;VARIABLE BLOCK
 BASE3 = $9000
 VISSAVE = $0000+BASE3 ;VISIT selection save
 V_AITVADS = $0001+BASE3 ;holds swing state / state lean / state control multiplier outcomes (3B)
@@ -297,7 +307,7 @@ V_WINNER = $0085+BASE3
 S_PLAY1M = $0086+BASE3 ;player + 1
 S_PLAY1L = $0087+BASE3 ;player - 1
 S_3PMODE = $0088+BASE3 ;0 = IND, 1 = WOR
-;S_4PMODE = $0089+BASE3 ;0 = EXTREMES, 1 = REGIONAL
+;S_4PMODE = $0089+BASE3
 V_FLOATMAX = $008A+BASE3 ;maximum party index for _FLOATMAX
 V_MARGIN = $008B+BASE3 ;do margin for _PCTRL
 V_PTCHAR = $008D+BASE3 ;6 PARTIES
@@ -561,7 +571,7 @@ EV_PANDEMIC = $0B
 EV_TERROR = $0C
 EV_BONUSCP = $08
 
-EVCAND_C = $0D
+EVCAND_C = $0E
 EVC_SCANDAL_NONE = $00
 EVC_SCANDAL_MINOR = $01
 EVC_SCANDAL_MAJOR = $02
@@ -579,6 +589,8 @@ HQ_COST = $05
 AI_MAX = $03
 CPGAIN_MAX = $4F
 SONGSIZE_MAX = $B2
+INCUMBENT_C = $07
+EVEN_SL = $07
 
 ACT_VISIT = $00
 ACT_TVADS = $01
@@ -721,6 +733,7 @@ P_PARTISANC = P_RSELC
 P_MAPINFC = $05
 P_FTCC = $05
 P_BL2 = $1D
+P_INCUMENUR = $11
 
 P_PLAYNR = $11
 P_PLAYNC = $08
@@ -1020,7 +1033,7 @@ D_AI_EC !hex FE00
 D_AI_LEAN !hex FBFE00
 D_AI_LEAN2 !hex FEFF00
 D_AI_SWING !hex FF0102
-D_AITVADS !hex FF0302010303 ;CTRL table (self/opp/und) 1 ; CTRL table 2
+D_AITVADS !hex FF0602010403 ;CTRL table 1 (self/opp/und) ; CTRL table 2
 D_MEGAST !hex 071E2631 ;NY/FL/TX/CA
 MEGASTAC = $04
 D_MEDSTA !hex 08090A0C0D191B1D2F

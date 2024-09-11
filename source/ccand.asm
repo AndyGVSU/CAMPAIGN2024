@@ -129,21 +129,6 @@ _CANDSEL
 @SELECTD
 	JSR _FTC
 	BNE @REDRAW
-	LDA C_HOME
-	JSR _CPOFFS
-	LDA #CPBLEAN
-	CLC
-	ADC V_PARTY
-	TAY
-	LDA (CP_ADDR),Y
-	CLC
-	ADC #$01
-	STA (CP_ADDR),Y ;STATE LEAN + 1 in home state
-	
-	LDY C_HOME
-	JSR _HQPLUS
-	LDY C_HOME
-	JSR _HQPLUS ;HQ + 2 in home state
 	
 	LDA S_CUSTOM
 	BEQ @SKIPVP
@@ -170,6 +155,28 @@ _CANDSEL
 	JSR _PLAYINP
 	JSR _DRWINCM
 	JSR _DRWAIM
+	
+	LDA C_INCUMB
+	AND #$0F
+	CMP #06 ;no DISGRACE bonus
+	BEQ @DISGRACE
+	
+	LDA C_HOME
+	JSR _CPOFFS
+	LDA #CPBLEAN
+	CLC
+	ADC V_PARTY
+	TAY
+	LDA (CP_ADDR),Y
+	CLC
+	ADC #$01
+	STA (CP_ADDR),Y ;STATE LEAN + 1 in home state
+	
+	LDY C_HOME
+	JSR _HQPLUS
+	LDY C_HOME
+	JSR _HQPLUS ;HQ + 2 in home state
+@DISGRACE
 	
 	JMP @QDONE
 
@@ -366,17 +373,18 @@ _SETUPPN
 	RTS 
 
 ;primary_candidate_generation() 
+;each candidate in a normal game gets 25 "primary points" distributed to their main stats (1-8)
 _CANDGEN 
 	+__LAB2O V_PRIMRY
 	LDA #PRIMARYC
 	STA FVAR1 ;current candidate
 @TOP 
-	LDY #$05
-@CLRLOOP 
+	LDY #CANDSTATC-1
+@SETLOOP 
 	LDA #$01
 	STA (OFFSET),Y
 	DEY 
-	BNE @CLRLOOP
+	BPL @SETLOOP
 	
 	LDX #$14 ;20 "primary points"
 
@@ -391,9 +399,8 @@ _CANDGEN
 @SKIPEQ 
 @RNGLOOP 
 	LDA #$05
-	JSR _RNG ;rand(0,3)
+	JSR _RNG
 	TAY
-	INY 
 	LDA S_EQCER
 	BEQ @SKIPEQ2
 	CPY #$01 ;if EQUAL CER, do not add to CHAR/INTL
@@ -919,14 +926,10 @@ _INITCPI
 	;get issue bonus
 	LDA CPSTATE
 	STA FARG1
-	LDA #00
-	STA FRET1
-
 	JSR _CISSUEB
-	LDA FRET1
-	LSR ;state lean = 1 + issue bonus / 2
+	LSR ;state lean = even SL + issue bonus / 2
 	CLC
-	ADC #07
+	ADC #EVEN_SL
 	LDY FY1
 	STA (CP_ADDR),Y
 	;starting CP = new state lean

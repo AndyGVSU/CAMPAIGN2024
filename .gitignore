@@ -1,0 +1,9 @@
+
+compiler/linux/acme
+compiler/win32/acmeold.exe
+build/buildreport
+build/buildreport
+build/camp
+/build
+/compiler
+labelreport

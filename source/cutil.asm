@@ -638,10 +638,15 @@ _INPUTF3
 	RTS
 	
 ;player_name_input() 
-_PLAYINP 
-	JSR _CLRFP
+_NAMEINP 
 	LDA #00
+	TAX
 	STA FVAR1 ;cursor pos
+@CLRLOOP
+	STA V_SETTEMP,X ;used for string temp
+	INX
+	CPX #NAMELEN
+	BNE @CLRLOOP
 
 	+__COORD P_PLAYNR,P_PLAYNC
 	LDA #NAMELEN-1
@@ -668,7 +673,7 @@ _PLAYINP
 @DRAW 
 	STA GX_CIND
 	LDX FVAR1
-	STA V_FPOINT,X ;used for string temp
+	STA V_SETTEMP,X 
 	JSR _GX_CHAR
 	INC GX_CCOL
 	INC FVAR1
@@ -980,16 +985,6 @@ _LREGLIM
 	LDA D_REGLIM,X
 	STA HIGHSTATE
 	RTS
-
-;load_state_lean(V_PARTY = party, CP_ADDR set beforehand)
-;uses A, Y
-_LDALEAN
-	LDA V_PARTY
-	CLC
-	ADC #CPBLEAN
-	TAY
-	LDA (CP_ADDR),Y
-	RTS
 	
 ;store_bit(OFFSET = address, X = bit starting from least significant bit 0, A = set value (0 or 1))
 ;sets bit X at address OFFSET, Y to A
@@ -1040,7 +1035,7 @@ _LDABIT
 	LDA #01
 @RTS
 	RTS
-
+	
 ;FAC_is_zero
 _FACIS0
 	LDX #00
@@ -1067,9 +1062,3 @@ _NIBBLE
 	ASL
 	ORA V_NIBBLE+1
 	RTS
-	
-
-
-
-
- 

@@ -26,7 +26,7 @@ _AI
 
 ;easy_ai() 
 _EASY 
-	JSR _SCHCLR
+	;JSR _SCHCLR
 	;set random region
 	LDA #$09
 	JSR _RNG
@@ -75,8 +75,6 @@ _HARDAI
 	JSR _AIPOLL
 	JSR _AIHLMULT
 	JSR _AIHQ
-	
-	JSR _SCHCLR
 	
 	;store top priority
 	LDA V_PRIORI
@@ -173,9 +171,24 @@ _AITVADS
 	LDA FAITV
 	CMP V_TVMAX ;TV ADS limit
 	BCS @FAIL
+	
+	LDX #00
 @LOOP
-	LDX FAITV
+	LDA V_PRIOR+STATE_C-1,X
+	CMP #10 ;i.e. 100% priority value. Don't do TV ADS if it isn't worth it.
+	BCC @FAIL
+	CMP V_PRIOR+STATE_C,X
+	BNE @TIE
+	INX
+	CPX REGION_C
+	BNE @LOOP
+@TIE
+	INX
+	TXA
+	JSR _RNG
+	TAX
 	LDA V_PRIORI+STATE_C-1,X
+	
 	AND #$0F
 	STA C_CREG
 	LDA #ACT_TVADS
@@ -187,6 +200,14 @@ _AITVADS
 @INC
 	INC FAITV
 @SUCCESS
+	LDA #00
+	STA V_PRIOR+STATE_C-1
+	LDA #STATE_C-1
+	STA FARG4
+	LDA #REGION_C+STATE_C-1
+	STA FVAR3
+	JSR _AISORT2 ;remove selected tv ads from priority list
+	
 	LDA #01
 	RTS
 @FAIL
@@ -346,8 +367,6 @@ _AIHLIST
 	STA FVAR1
 	
 	JSR _CISSUEB
-	LDA V_IBONUS
-	LSR
 	LSR
 	CLC
 	ADC FVAR1
@@ -390,6 +409,9 @@ _AIHLMULT
 	
 	STA FSTATE
 	JSR _CPOFFS
+	JSR _HSOFFR ;set to WEEK 1
+	LDX FSTATE
+	JSR _HSOFFS2
 	
 	JSR _MULTSWING
 	STX V_AITVADS
@@ -481,10 +503,8 @@ _AIHLMULT
 	JSR _FMUL10
 	JSR _FAC216
 	
-	TYA
 	LDX FSTATE
-	CLC
-	ADC V_REGISS-1,X ;region issue bonus sum (for breaking ties)
+	TYA
 	BNE @NONZERO
 @ZERO
 	LDA #00
@@ -507,21 +527,22 @@ _AIHLMULT
 
 ;ai_tv_ads_priority()
 ;applies TV ADS priority for FSTATE
-;if swing state, then use CTRL table 2; else if lean >= max then use CTRL table 1, else -1
+;if swing state, then use CTRL table 2; else if lean == max then use CTRL table 1, else -1
 _AITVPRI
 	LDA FSTATE
+	STA FARG1
 	JSR _STATEGR
 	STX FX1
 
 	LDA V_AITVADS
-	BEQ @LEAN
+	BEQ @NOTSWING
 	LDX V_AITVADS+2
 	LDA D_AITVADS+3,X
 	JMP @ADD
-@LEAN
+@NOTSWING
 	LDA V_AITVADS+1
 	CMP #02
-	BNE @NEG
+	BCC @NEG
 	LDX V_AITVADS+2
 	LDA D_AITVADS,X
 	JMP @ADD
@@ -534,17 +555,6 @@ _AITVPRI
 	CLC
 	ADC FRET1
 	STA V_PRIOR+STATE_C-2,X
-	
-	LDA #00
-	STA FRET1
-	JSR _CISSUEB
-	LDA FRET1
-	LSR
-	LDX FX1
-	CLC
-	ADC V_REGISS-1,X
-	STA V_REGISS-1,X
-	
 	RTS
 
 ;is_independent_party()
@@ -607,27 +617,17 @@ _AISORT2
 ;multiplier_swing_state(FSTATE = state index, CP_ADDR set)
 ;1 pt. for a "swing" state, which is if the state's [maximum STATE LEAN of all parties - current party's STATE LEAN] is < 2 (e.g. 8/7 for D/R, or 8/2/2/8 would be swing states for D/S); -1 otherwise
 _MULTSWING
-	JSR _MULTLMAX
-	STA FAITV ;holds max SL index
-	DEC FAITV
-	LDA #$00
-	TAX
-	TAY
-@LOOP2
-	CPY FAITV
-	BEQ @INC ;skip check of maximum index
-	LDA MAXLOW
+	JSR _LEANDIF2
+	LDA FRET2
+	LDX V_PARTY
 	SEC
-	SBC V_MAX,X
+	SBC V_LEAN,X
+	BPL @NEG
+	JSR _NEGATIV
+@NEG
 	BEQ @SWINGPLUS
-	CMP #$02
-	BCC @SWING
-@INC
-	INX
-	INX
-	INY
-	CPY S_PLAYER
-	BNE @LOOP2
+	CMP #$01
+	BEQ @SWING
 	LDX #00
 	JMP @RESULT
 @SWINGPLUS

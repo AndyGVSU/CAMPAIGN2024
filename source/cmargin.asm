@@ -569,7 +569,7 @@ _FIXEDPERC
 	RTS
 
 ;margin()
-;compares all the values calculated in _FIXMARGIN; gets the top two and subtracts them
+;compares candidates' percentages: gets the top two and subtracts them
 ;if tie, returns #00, else #01; returns margin in FAC (for example, 51%-49% = 2% = 2)
 _MARGIN
 	LDA #00
