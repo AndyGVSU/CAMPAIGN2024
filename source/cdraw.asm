@@ -114,7 +114,12 @@ _DRWPOPV
 
 ;draw_staff() 
 ;draws whether the staff is available or not
-_DRWSTAF 
+_DRWSTAF
+	LDA S_SKIPGAME
+	BEQ @SKIPGAME
+	RTS
+@SKIPGAME
+
 	+__COORD P_STAFFR,P_STAFFC
 	+__LAB2XY T_STAFF
 	JSR _GX_STR
@@ -208,7 +213,7 @@ _CLRBL
 	RTS 
 
 ;clear_bottom_left_status() 
-;clears candidate info
+;clears candidate info only
 _CLRBL2 
 	LDA #P_LEFT
 	STA GX_LX1
@@ -225,6 +230,10 @@ _CLRBL2
 ;primary,secondary,issues,title,name,home state
 ;health, funds, cumulative bonus
 _DRWCAND 
+	LDA S_SKIPGAME
+	BEQ @SKIPGAME
+	RTS
+@SKIPGAME
 	JSR _CLRBL2
 	LDA V_REDRW1
 	BNE @SKIPDRW
@@ -777,6 +786,11 @@ _CLRMENR
 ;draw_menu_right() 
 ;draws the campaign selection menu
 _DRWMENR 
+	LDA S_SKIPGAME
+	BEQ @SKIPGAME
+	RTS
+@SKIPGAME
+	
 	LDA V_REDRW2
 
 	BNE @NODRAW
@@ -853,16 +867,23 @@ _DRWINCM
 	+__LAB2XY T_INCUMB
 	JSR _GX_STR
 
-	LDX #$12
-	LDY #$18
+	LDX #P_INCUMENUR
+	LDY #P_INCUMENUR+INCUMBENT_C
 	JSR _RSELECT
 	BEQ @RTS
+	CMP #INCUMBENT_C
+	BEQ @FRINGE
 	ORA #$F0
 	STA C_INCUMB
 @RTS 
 	JSR _CLRBR
-	RTS 
-
+	RTS
+@FRINGE
+	LDX V_PARTY
+	LDA #01
+	STA V_FRINGE,X
+	RTS
+	
 ;draw_ai_menu 
 _DRWAIM 
 	JSR _CLRBR
@@ -881,6 +902,11 @@ _DRWAIM
 
 ;draw_week_schedule() 
 _DRWWSCH 
+	LDA S_SKIPGAME
+	BEQ @SKIPGAME
+	RTS
+@SKIPGAME
+	
 	JSR _CLRBR
 	LDX V_PARTY
 	LDA V_PTCOL,X
@@ -1007,6 +1033,11 @@ _DRWPRTSN
 ;right_menu_gray()
 ;grays out POLL / BUILD HQ if funds are too low or HQ is built that week
 _RMENUGRAY
+	LDA S_SKIPGAME
+	BEQ @SKIPGAME
+	RTS
+@SKIPGAME
+
 	LDA C_MONEY
 	CMP #10
 	BCS @GRAYOUT

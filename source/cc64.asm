@@ -242,51 +242,6 @@ _YESORNO2
 	LDY #P_NOYESR+1
 	JSR _RSELECT
 	RTS
-
-;load_neglect(X = state index if not from history)
-_LDANEGL
-	LDA V_SUMFH
-	BNE @HIST
-	LDA V_NEGLECT,X
-	RTS
-@HIST
-	LDY #06
-	LDA (HS_ADDR),Y
-	RTS
-
-;float_add_with_flag_set()
-;FADDT work correctly
-_FADDFLAG
-	LDA #00
-	STA ARG+6 ;why does this work???
-	LDA FAC
-	JSR _FADDT
-	RTS
-	
-;table_jsr(X/Y = jump table address, A = jump table index) 
-_TABLJSR
-	;modify load address
-	STX @L1+1
-	STY @L1+2
-	STX @L2+1
-	STY @L2+2
-	
-	;set load address
-	ASL
-	TAX
-@L1
-	LDA $0000,X
-	PHA
-	INX
-@L2
-	LDA $0000,X
-	STA @TEST+2
-	PLA
-	STA @TEST+1
-@TEST	
-	;execute
-	JSR $0000
-	RTS
 	
 ;copies V_MAX1B to V_MAX
 _MAX1B

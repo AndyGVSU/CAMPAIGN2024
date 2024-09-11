@@ -1,0 +1,34 @@
+DEMOCRATS:
+KAMALA HARRIS (2024): 3/7/5/5/6 - 3/2/2/3/3
+JOE BIDEN (2024): 2/2/3/6/6 - 3/3/3/3/4 - MEDIOCRE INCUMBENT; his deteriorating health (STAM -1, INTL -1) has driven significant hesitance over his candidacy (CHAR -1) within his party (NETW -2). Heavy support of Israel and tough border policy lead to more conservative issue values (DFENS +2).
+JOE BIDEN (2020): 3/3/4/8/6 - 3/3/3/3/2 - the idea of Biden was stronger than he was
+HILLARY CLINTON (2016): 1/3/7/8/7 - 3/2/2/3/4 - one of the most hated figures in American political history
+BARACK OBAMA (2012): 7/7/6/4/6 - 3/2/3/3/3 - Hope and change didn't pan out; Obama gets (CHAR -1) and AVERAGE incumbent status
+BARACK OBAMA (2008): 8/7/6/4/6 - 3/2/3/3/3
+JOHN KERRY (2004): 3/5/7/6/6 - 3/2/2/3/3
+AL GORE (2000): 2/7/7/8/4 - 2/2/1/2/3
+
+ELIZABETH WARREN: 4/5/6/6/4 - 1/2/2/1/2
+BERNIE SANDERS: 5/4/5/2/2 - 1/1/1/1/1 (pretty much as liberal as a US politician gets without being fringe)
+MICHAEL BLOOMBERG: 1/5/4/1/8 - 4/3/2/4/3
+GAVIN NEWSOM: 4/7/5/6/5 - 2/1/2/3/3 (as a governor, has no real national defense stances)
+J.B.PRITZKER: 5/5/5/7/7 - 2/1/2/2/2 (..)
+
+REPUBLICANS:
+DONALD TRUMP (2024): 4/2/2/3/7 - 7/6/6/6/6 - Trump is definitely not the same candidate as in 2016 or 2020; he is only focused on his 2020 loss and has multiple criminal trials/convictions, especially related to the 1/6 incident and is likely physically- and mentally-damaged from COVID-19 and old age (CHAR -1, STAM -1). He continues to build up support with his base as well as *reluctantly* in the party, though his numerous criminal fees have likely kneecapped the personal funding he had in 2016/2020 (NETW +1). He has blatantly sold out his campaign (+1 CORP). His presidency defined his issues as the Republican party line and led to the overturning of Dobbs -- tremendously unpopular with the American public (WLFRE = 7). He is still a DISGRACE incumbent.
+DONALD TRUMP (2020): 5/3/2/2/6 - 6/6/6/6/6 - Trump's association with the COVID-19 pandemic, his adherence to the Republican party line over his outsider status, and his chaotic presidency gives him, respectively: (CHAR -2), more conservative issues, and the DISGRACE incumbent status. He has built up a diehard support with his base (NETW +1).
+DONALD TRUMP (2016): 7/3/2/1/5 - 5/6/6/6/5
+MITT ROMNEY (2012) - 3/5/6/6/8 - 5/5/5/6/6
+JOHN MCCAIN (2008) - 4/5/6/7/5 - 4/6/4/5/6
+GEORGE W. BUSH (2004) - 5/5/6/6/8 - 6/6/6/6/6 - Bush's post-9/11 uniting of the country against terrorism gives him (CHAR +1) and AVERAGE incumbent status, but only AVERAGE -- his approval fell precipitously throughout his presidency.
+GEORGE W. BUSH (2000) - 4/6/6/6/8 - 6/6/6/6/5
+
+TED CRUZ: 3/6/6/6/7 - 6/6/6/6/6
+RON DESANTIS: 2/7/5/5/5 - 6/6/6/6/6
+M.T.GREENE: 3/8/2/4/5 - 6/6/6/6/6
+MIKE PENCE: 2/5/6/7/6 - 6/7/6/6/6
+J.D. VANCE: 2/7/5/6/6 - 5/6/6/5?/5
+
+CUSTOM:
+JIMMY CARTER (1980) (inc DISASTER): 4/5/5/4/5 - 3/2/2/2/3 
+RONALD REAGAN (1980): 8/4/5/5/8 - 6/6/6/6/6

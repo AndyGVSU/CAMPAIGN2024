@@ -213,7 +213,8 @@ _SUMEC
 	LDA FSTATE
 	CMP FARG5
 	BNE @LOOP
-
+	
+	;calculate landslide
 	LDA #00
 	STA FPARTY
 	STA V_LANDSLIDE
@@ -237,7 +238,6 @@ _SUMEC
 	LDA FPARTY
 	CMP S_PLAYER
 	BNE @LANDSLIDE
-	
 	RTS 
 
 ;state_get_region(A=state index)
@@ -250,12 +250,17 @@ _STATEGR
 	BCS @LOOP
 	RTS 
 
-;national_campaign(FARG1=extra region,FARG2=base value)
+;national_campaign(FARG1 = extra region, FARG2 = base value)
 ;for pregame / lastminute -- all states
-;directly adds base value CP + issue bonus at no cost
-;DOES add CP / 4 to opponents
+;directly adds base value CP + issue bonus at no cost UNLESS V_FRINGE
 ;LOCAL: FARG3
 _NATCAMP 
+	LDX V_PARTY
+	LDA V_FRINGE,X
+	BEQ @FRINGE
+	RTS
+@FRINGE
+	
 	LDA FARG1
 	STA FARG3
 
@@ -268,15 +273,11 @@ _NATCAMP
 @LOOP 
 	LDA FSTATE
 	STA FARG1
-
-	LDA #00
-	STA FRET1
 	JSR _CISSUEB
-	LDA FRET1
 	ASL 
 	CLC 
 	ADC FARG2
-	LSR ;(issue ; 2 + base) / 2 
+	LSR ;(issue bonus * 2 + base) / 2 
 	STA FRET1
 	
 	JSR _ADDCP
@@ -427,8 +428,9 @@ _MULTLEVEL
 	RTS
 	
 ;calc_issue_bonus(FARG1=state index)
+;max issue bonus is 10, but is calculated out of 20
 ;IS_ADDR set beforehand
-;adds issue bonus for current candidate to FRET1
+;returns issue bonus out of 20 in V_IBONUS, A = issue bonus out of 10
 _CISSUEB 
 	LDA #$00
 	STA V_IBONUS
@@ -451,8 +453,6 @@ _CISSUEB
 @DOUBLE
 	LDA V_IBONUS
 	LSR
-	JSR _CPADD
-	
 	RTS 
 @LOOP 
 	LDA C_ISSUES,Y
@@ -739,11 +739,11 @@ _TIEISSUE
 	LDX V_MAXPLI
 	LDA V_MAXPL,X
 	JSR _CANDLOAD
-	LDA #00
-	STA FRET1
+	LDY CPSTATE
+	STY FARG1
 	JSR _CISSUEB
 	LDX V_MAXPLI 
-	LDA FRET1
+	LDA V_IBONUS ;use out-of-20 for more precision
 	STA V_MAX1B,X
 
 	INC V_MAXPLI
@@ -2083,7 +2083,7 @@ _SWINGCT
 	
 ;domination_check()
 ;if a state's winner has controlled it (had a margin > 0) for the entire game, +1 SL
-;if a candidate has won in a V_LANDSLIDE, +5 SL to all states they won
+;if a candidate has won in a V_LANDSLIDE, +SL to all states they won
 _DOMCHECK
 	JSR _SUMEC
 	JSR _CPOFFR

@@ -213,13 +213,22 @@ _SCHCLR
 	INX 
 	CPX #ACTIONMAX+1
 	BNE @SLOOP
-	;clear fund/health precalc
+	
+	;clear CP gain precalc
 	LDX #00
 @PLOOP 
-	STA V_FHCOST,X
+	STA V_CPGAIN,X
 	INX 
 	CPX #CPGAIN_MAX
 	BNE @PLOOP
+	
+	;clear fund/health precalc
+	LDX #00
+@FHLOOP 
+	STA V_FHCOST,X
+	INX 
+	CPX #(ACTIONMAX+1)*2
+	BNE @FHLOOP
 	
 	STA V_CPGPTR ;cp gain ptr reset
 	
@@ -348,6 +357,9 @@ _CALCZZ
 ;calculates the CP/HEALTH/FUNDS changes from a VISIT
 ;returns to FRET1/2/3 respectively
 _CALCVIS 
+	LDA #00
+	STA V_VBONUSAMT
+	
 	JSR _LDAPCH
 	AND #$F8
 	BNE @LOWHEAL
@@ -423,8 +435,8 @@ _CALCVIS
 	STA V_WARN 
 	BNE @COST
 @NOTCSEC 
-	INC FRET1
-	INC FRET1 ;+2 for cumulative visit
+	LDA #03
+	STA V_VBONUSAMT ;+3 for cumulative visit
 	LDA V_VBONUS
 	ORA #$80
 	STA V_VBONUS ;set penalty
@@ -444,7 +456,6 @@ _CALCVIS
 	LSR 
 	LSR 
 	JSR _CPADD ;health / 32
-	JSR _CISSUEB ;issue bonus
 @COST ;if we get to this point, there was a CP gain
 	LDA FRET1
 	LSR 
@@ -458,7 +469,13 @@ _CALCVIS
 	JSR _HFNEG
 	JSR _STPCHF
 	
-	;event handling -- independent of costs
+	;event handling / CP bonus -- independent of costs
+	JSR _CISSUEB ;issue bonus
+	CLC
+	ADC FRET1
+	ADC V_VBONUSAMT
+	STA FRET1
+	
 	LDY FARG1
 	LDA #EV_FAIR
 	JSR _EVENTON
@@ -547,17 +564,25 @@ _CALCTV
 	LDA #00
 	STA FRET1
 
-	LDA FSTATE
-	JSR _CISSUEB
-	ASL
-	STA FRET1
-
 	LDA C_TV
 	ASL
 	JSR _CPADD
 	LDA C_CER
 	JSR _CPADD
 	JSR _LDALEAN
+	JSR _CPADD
+	LSR FRET1
+	
+	LDA FRET1
+	LSR
+	LSR
+	CLC
+	ADC FVAR2
+	STA FVAR2 ;add (CP/4) to running fund cost
+	
+	LDA FSTATE
+	STA FARG1
+	JSR _CISSUEB
 	JSR _CPADD
 	;event handling
 	LDY FSTATE
@@ -566,19 +591,9 @@ _CALCTV
 	BNE @PLUS
 	LDA #EV_BONUSCP
 	JSR _CPADD
-	DEC FVAR2 ;-1 cost for the added free 8 CP 
 @PLUS
 	LDA FRET1
-	LSR
-	LSR
-	LSR
-	CLC
-	ADC FVAR2
-	STA FVAR2 ;add (CP/8) to running total as cost (this is really (CP/2) / 4)
-
-	LDA FRET1 ;add (CP/2) to actual gain
-	LSR
-	JSR _STPCCP
+	JSR _STPCCP ;add bonuses to actual gain
 	
 	JSR _CPOFFI
 	INC FSTATE
@@ -588,7 +603,8 @@ _CALCTV
 	
 	LDA #16 ;flat cost HEALTH
 	STA FRET2
-	LDA FVAR2
+	
+	LDA FVAR2 ;flat funds cost + running total
 	CLC 
 	ADC C_TV
 	ADC V_WEEK
@@ -608,7 +624,7 @@ _CALCTV
 
 ;tv_half(FARG3=region) 
 ;checks whether the HEALTH/FUND costs are below precalc h/f
-;if not, halves the CP gains and the HEALTH/FUND costs
+;if not, halves the CP gains and the HEALTH/FUND costs -- including CP bonuses
 _TVHALF 
 	JSR _LDAPCH
 	CMP FRET2
