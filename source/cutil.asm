@@ -1033,30 +1033,3 @@ _LDABIT
 	LDA #01
 @RTS
 	RTS
-	
-;FAC_is_zero
-_FACIS0
-	LDX #00
-@LOOP
-	LDA FAC,X
-	BNE @FALSE
-	INX
-	CPX #FLOATLEN
-	BNE @LOOP
-	LDA #01
-	RTS
-@FALSE
-	LDA #00
-	RTS
-	
-;pack_nibble(V_NIBBLE+0/+1)
-;packs two 4-bit values (formatted like #%0000xxxx)
-;returns A = packed value
-_NIBBLE
-	LDA V_NIBBLE+0
-	ASL
-	ASL
-	ASL
-	ASL
-	ORA V_NIBBLE+1
-	RTS
