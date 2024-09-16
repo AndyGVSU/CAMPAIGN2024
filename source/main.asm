@@ -216,7 +216,6 @@ V_DPERSNL = $00A0+BASE2_6 ;debate personal enabled (1B)
 V_DBLOG = $00A1+BASE2_6 ;(84B)
 V_FLOAT3 = $00F5+BASE2_6 ;extra float value (5B)
 ;6B free for V_FLOAT3
-
 BASE2_5 = BASE2_6 + $0100
 V_CPFLOAT = $0000+BASE2_5 ;float values 5 parties * 5B float = (25B)
 V_SCHEDC = $0019+BASE2_5 ;holds schedule copy (8B)
@@ -354,7 +353,7 @@ GX_LX2 = $00CA+BASE3
 GX_LY2 = $00CB+BASE3
 S_PCOLOR = $00CC+BASE3
 S_MBLANK = $00CD+BASE3
-S_EVENMAP = $00CE+BASE3
+S_UNDPERC = $00CE+BASE3
 V_MUSTMR = $00CF+BASE3
 V_SCRREG1 = $00D0+BASE3
 V_MUSFLAG = $00D1+BASE3
@@ -376,7 +375,7 @@ V_POLDIV = $00F8+BASE3 ;poll count for region (temp)
 V_STRWAIT = $00F9+BASE3 ;string draw delay
 V_MAXPLI = $00FA+BASE3 ;V_MAXPL index
 V_PLURAL = $00FB+BASE3 ;floor(EC / player count) (2B)
-S_PARTISAN = $00FD+BASE3 ;PARTISAN setting (0 = default, 1 = half, 2 = quarter)
+S_RATINGSTR = $00FD+BASE3 ;PARTISAN setting (0 = default, 1 = half, 2 = quarter)
 V_FPNCHK = $00FE+BASE3 ;hold value for _FPNCHK
 V_POPWIN = $00FF+BASE3 ;winner of the popular vote (party index)
 
@@ -540,9 +539,11 @@ UND_PRTY = $04
 STATE_C = $34
 REGION_C = $09
 PRIMC1L = $07
-PRIMARYC = $08
+CANDSTATC = $05
+PRIMARYC = $07
 PRIMDATC = $11
 NAMELEN = $0A
+PARTYNAMELEN = $0B
 CANDDATA = $20
 CPBLEAN = $04
 CPBLOCK = $08
@@ -684,7 +685,7 @@ P_WEEKC = P_RSELC2
 P_TITL2R = $12
 P_TITL2C = $06
 P_SETTR = $05
-P_SETTR2 = $0E
+P_SETTR2 = $0D
 P_INCUMR = $10
 P_INCUMC = P_RSELC-1
 P_AIMENR = $10
@@ -728,8 +729,10 @@ P_VISITC = P_RSELC2
 P_TITLEC = P_RSELC2
 P_ENDMNR = $11
 P_ENDMNC = P_RSELC
-P_PARTISANR = P_ENDMNR
-P_PARTISANC = P_RSELC
+P_RATINGSTRR = P_ENDMNR
+P_RATINGSTRC = P_RSELC
+P_UNDMENUR = P_RATINGSTRR+1
+P_UNDMENUC = P_RSELC
 P_MAPINFC = $05
 P_FTCC = $05
 P_BL2 = $1D
@@ -953,7 +956,6 @@ T_DETAILED !hex 6F4D415247494E00
 T_VP !hex 6F43484F4F5345205650FF53544154453A00
 T_VPSTA !hex 6F56503A00
 T_OTHER !hex 674F544845522000
-;T_EVENMAP !hex 4556454E204D415028302D39293F203000
 T_EVENTC !hex 6D2A5350454349414C204E45575320414C455254212A00
 T_EVENTC2 !hex 6D54484520534954554154494F4E3A00
 T_EVENTC3 !hex 6D594F5552FF524553504F4E53453A00
@@ -965,8 +967,9 @@ T_TITLE !binary "source/TEXTTITLEMENU3.dat"
 T_MENUBL !binary "source/TEXTMENUBL.dat" 
 T_POSTAL !binary "source/TEXTPOSTAL.dat" 
 T_MENUR !binary "source/TEXTRIGHTMENU.dat"
-T_PARTISAN !binary "source/TEXTPARTISAN.DAT"
-T_MENURLEN = T_PARTISAN - T_MENUR
+T_RATINGSTR !binary "source/TEXTPARTISAN.DAT"
+T_MENURLEN = T_RATINGSTR - T_MENUR
+T_UNDMENU !binary "source/TEXTUNDMENU.DAT"
 T_REGION !binary "source/TEXTREGIONS2.dat"
 T_ENDMNU !binary "source/TEXTENDMENU.dat" 
 T_INCUMB !binary "source/TEXTINCUMBENT.dat" 
@@ -1062,6 +1065,7 @@ D_FLOATMAX !hex 87C8000000 ;100, the maximum floating point value
 HISTV !byte $00
 
 ;one-time (copied) 
+_COPYDATA
 D_EXCHAR !binary "source/DATAEXTRACHAR.dat" 
 D_SPRITE !binary "source/DATASPRITE.dat" 
 D_PTCOL2 !hex 060207050C0408
@@ -1071,9 +1075,13 @@ V_POPVOTE = D_EXCHAR ;popular vote in plaintext (20B)
 V_REGISS = D_EXCHAR+20 ;issue bonus by region for a candidate (9B)
 V_DEADHOLD = D_EXCHAR+29 ;var hold for dead player (3B)
 V_VISLOG = D_EXCHAR+32 ;action per state per player (255B)
+V_PLAYNAME = D_EXCHAR+287 ;holds temp player name (11B)
+V_SETTEMP = V_PLAYNAME ;holds temp settings (#SETTINGC B (must be < 11))
 
 _DATAEND
 DATASIZE = _DATAEND-DATA2024
+COPYSIZE = _DATAEND-_COPYDATA
+
 ;music files must be compiled with respective addresses separately using GoatTracker (F9 to compile)
 MUSIC = $7A00
 *= MUSIC

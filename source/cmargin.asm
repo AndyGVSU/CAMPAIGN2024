@@ -48,7 +48,6 @@ _STCTRL
 	
 	JSR _CPOFFR
 @LOOP 
-	+__LAB2O V_DOMNGL
 	LDA #$FF
 	STA V_MARGIN
 	
@@ -454,11 +453,8 @@ _SETMARG
 	JMP @MAINLOOP
 @DONE
 	RTS
-;sets UND share for all parties (should only be called once)
+;sets non-UND share for all parties (should only be called once)
 _EVENPERC
-	LDX S_PLAYER
-	LDA D_UND-2,X
-	STA V_UNDPERC ;UND%
 	LDA #100
 	SEC
 	SBC V_UNDPERC
