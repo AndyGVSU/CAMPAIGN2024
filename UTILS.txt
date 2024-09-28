@@ -4,7 +4,7 @@ Python is required to run these scripts.
 
 python custom_us.py [vanilla CAMPAIGN 2024 ROM filename] [custom map filename]
 
-Allows a custom map (EC, STATE LEANS, ISSUES) to be modded into a CAMPAIGN MANAGER 2024 ROM (C64 only). The new ROM [original name+"mod"] is your custom ROM.
+Allows a custom map (EC, STATE LEANS, ISSUES) to be modded into a CAMPAIGN MANAGER 2024 ROM (C64 only). The new ROM [original name+"mod"] is your custom ROM. Both parameters must be in the same directory.
 
 Custom map format: (an original game map is included as an example)
 MAP NAME (this line is ignored)
